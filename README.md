@@ -1,4 +1,4 @@
-![GitHub Actions](https://github.com/Smashliker/MT2024/actions/workflows/python-package.yml/badge.svg)
+[![CI](https://github.com/Smashliker/MT2024/actions/workflows/python-package.yml/badge.svg)](https://github.com/Smashliker/MT2024/actions/workflows/python-package.yml)
 
 # Master Thesis
 This is the folder for the code in Benjamin Mydland's Master Thesis. It is built on top of the following repository: https://github.com/CN-UPB/NFVdeep/tree/main  
