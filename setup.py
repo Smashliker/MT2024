@@ -11,7 +11,7 @@ with open(os.path.join(this_directory, "README.md"), encoding="utf-8") as f:
 requirements = [
     #BM: Added these to assist Actions
     "setuptools>=65.5.1",
-    "wheel>=0.38.0"
+    "wheel>=0.38.0",
     "stable-baselines3==1.5.0",
     "tabulate>=0.8.0",
     "tensorboard>=2.9.0",
