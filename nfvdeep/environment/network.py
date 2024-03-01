@@ -7,6 +7,8 @@ import networkx as nx
 
 from nfvdeep.environment.sfc import ServiceFunctionChain
 
+import pickle
+
 
 class Network:
     def __init__(self, overlay, costs={"cpu": 0.2, "memory": 0.2, "bandwidth": 0.0006}):
@@ -257,7 +259,12 @@ class Network:
 
         # parse overlay from gpickle if
         if isinstance(overlay, str) and overlay.endswith(".gpickle"):
+            """
+            BM: This function is deprecated, it is replaced below
             overlay = nx.read_gpickle(overlay)
+            """
+            with open(overlay, 'rb') as f:
+                overlay = pickle.load(f)
 
         node_attributes = {"cpu": int, "memory": float, "bandwidth": float}
         for _, data in overlay.nodes(data=True):
