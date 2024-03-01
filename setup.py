@@ -22,7 +22,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/CN-UPB/NFVdeep",
     packages=find_packages(),
-    python_requires="==3.8.*",
+    python_requires=">=3.8.*", #BM: I changed this to function with higher versions of python
     install_requires=requirements,
     zip_safe=False,
     classifiers=[
