@@ -10,7 +10,7 @@ with open(os.path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 requirements = [
     #BM: Added these to assist Actions
-    "setuptools==65.5.1",
+    "setuptools==65.5.0",
     "pip==21",
     "wheel>=0.38.0",
     "stable-baselines3==1.5.0",
