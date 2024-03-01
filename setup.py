@@ -8,10 +8,16 @@ with open(os.path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
 
+"""
+BM: Added these requirements (up until the next #) to assist Github Actions. They need to be the specified versions since:
+    * The tests break if stable baselines is upgraded beyond 1.5.0
+    * Stable baselines 1.5.0 depends on gym==0.21
+    * gym==0.21 depends on setuptools<=65.5.0 and pip<=21 - https://github.com/openai/gym/issues/3176#issuecomment-1560026649
+"""
 requirements = [
-    #BM: Added these to assist Actions
     "setuptools==65.5.0",
     "pip==21",
+    #
     "wheel>=0.38.0",
     "stable-baselines3==1.5.0",
     "tabulate>=0.8.0",
