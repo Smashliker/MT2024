@@ -6,6 +6,10 @@ import networkx as nx
 from stable_baselines3 import PPO
 from stable_baselines3.common.evaluation import evaluate_policy
 
+#BM: These lines ensure that pytest is actually able to run in the main directory
+import sys
+sys.path.append('.')
+
 from nfvdeep.environment.network import Network
 from nfvdeep.environment.sfc import ServiceFunctionChain
 from nfvdeep.environment.env import Env
