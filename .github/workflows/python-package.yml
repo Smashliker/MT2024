@@ -16,8 +16,8 @@ jobs:
     runs-on: ${{matrix.platform}}
     strategy:
       matrix:
-        platform: [ubuntu-latest, macos-latest]
-        python-version: [3.8]
+        platform: [ubuntu-latest, macos-latest] 
+        python-version: [3.8, 3.10.12] #Original NFVdeep code made for 3.8, this thesis done in 3.10.12
 
     steps:
     - uses: actions/checkout@v2
@@ -28,7 +28,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        python -m pip install pip==21
+        python -m pip install pip==21 # This must be this version due to circumstances explained in a comment in setup.py
         pip install .
         pip install pytest
     
