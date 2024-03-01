@@ -11,7 +11,7 @@ Then it is just a matter of executing the script, an example being:
 ```python3 script.py --agent PPO --overlay data/abilene.gpickle --requests data/requests.json --output output```
 
 
-The information following below the line is from that original repository.
+The information following below is from the original repository.
 --------------------------------------------------------------------------
 
 ![GitHub CI](https://github.com/CN-UPB/NFVdeep/workflows/Python%20application/badge.svg)
