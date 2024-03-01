@@ -2,8 +2,16 @@
 
 # Master Thesis
 This is the folder for the code in Benjamin Mydland's Master Thesis. It is built on top of the following repository: https://github.com/CN-UPB/NFVdeep/tree/main  
-The information following below the line is from that original repository.
 
+## Setup and Execution
+All dependencies need be installed:  
+```pip install .```  
+  
+Then it is just a matter of executing the script, an example being:  
+```python3 script.py --agent PPO --overlay data/abilene.gpickle --requests data/requests.json --output output```
+
+
+The information following below the line is from that original repository.
 --------------------------------------------------------------------------
 
 ![GitHub CI](https://github.com/CN-UPB/NFVdeep/workflows/Python%20application/badge.svg)
