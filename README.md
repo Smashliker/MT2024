@@ -6,12 +6,14 @@ This is the folder for the code in Benjamin Mydland's Master Thesis. It is built
 ## Setup and Execution
 All dependencies need be installed:  
 ```pip install .```  
+
+The network topology is created by editing the function ```generate_graph()``` in "graph_generator.py", and then executing the script: ```python3 graph_generator.py```. The network will then be generated as "/data/network.gpickle".
   
-Then it is just a matter of executing the script, an example being:  
+Then it is just a matter of executing the script, an example execution being:  
 ```python3 script.py --agent PPO --overlay data/abilene.gpickle --requests data/requests.json --output output```
 
 
-The information following below is from the original repository.
+The information following below is from the original repository:
 --------------------------------------------------------------------------
 
 ![GitHub CI](https://github.com/CN-UPB/NFVdeep/workflows/Python%20application/badge.svg)
