@@ -4,20 +4,41 @@ import random
 import numpy as np
 import argparse
 
+import pickle
 
 def generate_graph(file):
     G = nx.Graph()
-    G.add_node(0, cpu=3, memory=10.0, bandwidth=40.0)
-    G.add_node(1, cpu=3, memory=25.0, bandwidth=40.0)
-    G.add_node(2, cpu=10, memory=50.0, bandwidth=40.0)
-    # G.add_node(3, cpu=1, memory=1.0, bandwidth=10.0)
-    # G.add_node(4, cpu=3, memory=30.0, bandwidth=40.0)
-    G.add_edge(0, 1, latency=50.0)
-    G.add_edge(1, 2, latency=50.0)
-    # G.add_edge(2, 3, latency=50.0)
-    # G.add_edge(3, 4, latency=500.0)
+    G.add_node(0, cpu=30, memory=10.0, bandwidth=110.0)
+    G.add_node(1, cpu=30, memory=25.0, bandwidth=110.0)
+    G.add_node(2, cpu=30, memory=50.0, bandwidth=110.0)
+    G.add_node(3, cpu=30, memory=1.0, bandwidth=110.0)
+    G.add_node(4, cpu=30, memory=30.0, bandwidth=110.0)
+    G.add_node(5, cpu=30, memory=30.0, bandwidth=110.0)
+    G.add_node(6, cpu=30, memory=30.0, bandwidth=110.0)
+    G.add_node(7, cpu=30, memory=30.0, bandwidth=110.0)
+    G.add_node(8, cpu=30, memory=30.0, bandwidth=110.0)
+    G.add_node(9, cpu=30, memory=30.0, bandwidth=110.0)
 
-    nx.write_gpickle(G, file)
+    #G.add_edge(0, 1, latency=50.0)
+    #G.add_edge(1, 2, latency=50.0)
+    #G.add_edge(2, 3, latency=50.0)
+    #G.add_edge(3, 4, latency=500.0)
+
+    graphSize = len(G)
+
+    #BM: This nested for-loop creates a mesh topology
+    for (mainIndex, mainNode) in enumerate(G):
+
+        firstNeighborIndex = mainIndex + 1
+        
+        if firstNeighborIndex < graphSize:
+            for secondIndex in range(firstNeighborIndex, graphSize):
+                G.add_edge(mainIndex, secondIndex, latency=50.0)
+
+    #BM: Changed this https://stackoverflow.com/a/77377332
+    with open(file, 'wb') as f:
+        pickle.dump(G, f, pickle.HIGHEST_PROTOCOL)
+    #nx.write_gpickle(G, file)
 
 
 def gml_reader(seed, cpu, memory, bandwidth, inputfile, outputfile):
@@ -103,7 +124,7 @@ def graphml_reader(seed, cpu, memory, bandwidth, inputfile, outputfile):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, nargs="?", default=0)
-    parser.add_argument("--inputfile", type=str, nargs="?", const=1)
+    parser.add_argument("--inputfile", type=str, nargs="?", default="dummy", const=1) #BM: Added a default to this argument as it is better to do so
     parser.add_argument(
         "--outputfile", type=str, nargs="?", const=1, default=r"./data/network.gpickle"
     )
