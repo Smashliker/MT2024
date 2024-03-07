@@ -1,5 +1,4 @@
 import networkx as nx
-from geopy.distance import geodesic
 import random
 import numpy as np
 import argparse
