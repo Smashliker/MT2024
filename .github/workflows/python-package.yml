@@ -29,8 +29,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install pip==21 # This must be this version due to circumstances explained in a comment in setup.py
-        pip install .
-        pip install pytest
+        pip install -r ./requirements.txt
     
     - name: Run tests with pytest
       run: |
