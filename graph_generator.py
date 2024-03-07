@@ -5,139 +5,87 @@ import numpy as np
 import argparse
 
 import pickle
+import sys
 
-def generate_graph(file):
-    G = nx.Graph()
-    G.add_node(0, cpu=30, memory=10.0, bandwidth=110.0)
-    G.add_node(1, cpu=30, memory=25.0, bandwidth=110.0)
-    G.add_node(2, cpu=30, memory=50.0, bandwidth=110.0)
-    G.add_node(3, cpu=30, memory=1.0, bandwidth=110.0)
-    G.add_node(4, cpu=30, memory=30.0, bandwidth=110.0)
-    G.add_node(5, cpu=30, memory=30.0, bandwidth=110.0)
-    G.add_node(6, cpu=30, memory=30.0, bandwidth=110.0)
-    G.add_node(7, cpu=30, memory=30.0, bandwidth=110.0)
-    G.add_node(8, cpu=30, memory=30.0, bandwidth=110.0)
-    G.add_node(9, cpu=30, memory=30.0, bandwidth=110.0)
+DEFAULTOUTPUTFILE = r"./data/network"
 
-    #G.add_edge(0, 1, latency=50.0)
-    #G.add_edge(1, 2, latency=50.0)
-    #G.add_edge(2, 3, latency=50.0)
-    #G.add_edge(3, 4, latency=500.0)
 
-    graphSize = len(G)
+def generate_graph(
+        outputfile: str = DEFAULTOUTPUTFILE,
+        CPUs: list[float] = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95] #These default values imitate results from a U[50, 100] distribution
+        ) -> None:
+    """
+    Function that creates a graph in outputfile with amount of nodes equal to length of the lists.
+    """
+    
+    graph = nx.Graph()
 
-    #BM: This nested for-loop creates a mesh topology
-    for (mainIndex, mainNode) in enumerate(G):
+    for (nodeIndex, _) in enumerate(CPUs):
+        graph.add_node(nodeIndex, cpu=CPUs[nodeIndex])
+    
+    #makeFullMesh(graph) 
 
+    #https://stackoverflow.com/a/77377332
+    with open(f"{outputfile}.gpickle", 'wb') as f:
+        pickle.dump(graph, f, pickle.HIGHEST_PROTOCOL)
+
+    with open(f"{outputfile}.txt", 'w') as f:
+        oldSys = sys.stdout
+        sys.stdout = f
+
+        print("nodes:")
+        print(graph.nodes(data=True))
+        print()
+        print("edges:")
+        print(nx.to_dict_of_dicts(graph))
+
+        sys.stdout = oldSys
+
+
+#TODO: Make generic
+def generateCPUs(
+        nNodes: int = 10,
+        CPUDist: list[int] = [50, 100]   
+        ) -> list[float]:
+    """
+    Function that creates a list with uniformly distributed values in the range defined by CPUDist.
+    """
+
+    CPUs = []
+
+    for _ in range(nNodes):
+        CPUs.append(random.uniform(CPUDist[0], CPUDist[1]))
+
+    return CPUs
+
+
+def makeFullMesh(graph: nx.Graph) -> None: 
+    """
+    Function that makes any nx.Graph a fully connected mesh topology.
+    """
+    graphSize = len(graph)
+
+    for (mainIndex, _) in enumerate(graph):
         firstNeighborIndex = mainIndex + 1
         
         if firstNeighborIndex < graphSize:
             for secondIndex in range(firstNeighborIndex, graphSize):
-                G.add_edge(mainIndex, secondIndex, latency=50.0)
-
-    #BM: Changed this https://stackoverflow.com/a/77377332
-    with open(file, 'wb') as f:
-        pickle.dump(G, f, pickle.HIGHEST_PROTOCOL)
-    #nx.write_gpickle(G, file)
-
-
-def gml_reader(seed, cpu, memory, bandwidth, inputfile, outputfile):
-    SPEED_OF_LIGHT = 299792458  # meter per second
-    PROPAGATION_FACTOR = 0.77  # https://en.wikipedia.org/wiki/Propagation_delay
-
-    random.seed(seed)
-
-    file = inputfile
-    if not file.endswith(".gml"):
-        raise ValueError("{} is not a GraphML file".format(file))
-    network = nx.read_gml(file)
-
-    # TODO assume undirected graph??
-    newnetwork = nx.Graph()
-    mapping = dict()
-
-    for num, node in enumerate(network.nodes()):
-        mapping[node] = num
-        newnetwork.add_node(
-            num,
-            cpu=random.randint(*cpu),
-            memory=float(random.uniform(*memory)),
-            bandwidth=float(random.uniform(*bandwidth)),
-        )
-
-    for e in network.edges():
-        n1 = network.nodes(data=True)[e[0]]
-        n2 = network.nodes(data=True)[e[1]]
-        n1_coord = np.array((n1["graphics"].get("x"), n1["graphics"].get("y")))
-        n2_coord = np.array((n2["graphics"].get("x"), n2["graphics"].get("y")))
-
-        distance = np.linalg.norm(n1_coord - n2_coord)
-        distance = distance / 0.00062137  # miles->meter
-        delay = (
-            distance / SPEED_OF_LIGHT * 1000
-        ) * PROPAGATION_FACTOR  # in milliseconds
-
-        newnetwork.add_edge(mapping[e[0]], mapping[e[1]], latency=float(delay))
-
-    nx.write_gpickle(newnetwork, outputfile)
-
-
-def graphml_reader(seed, cpu, memory, bandwidth, inputfile, outputfile):
-    SPEED_OF_LIGHT = 299792458  # meter per second
-    PROPAGATION_FACTOR = 0.77  # https://en.wikipedia.org/wiki/Propagation_delay
-
-    random.seed(seed)
-    # setting ranged for random values of the nodes
-
-    file = inputfile
-    if not file.endswith(".graphml"):
-        raise ValueError("{} is not a GraphML file".format(file))
-    network = nx.read_graphml(file, node_type=int)
-
-    # TODO assume undirected graph??
-    newnetwork = nx.Graph()
-    mapping = dict()
-
-    for num, node in enumerate(network.nodes()):
-        mapping[node] = num
-        newnetwork.add_node(
-            num,
-            cpu=random.randint(*cpu),
-            memory=float(random.uniform(*memory)),
-            bandwidth=float(random.uniform(*bandwidth)),
-        )
-
-    for e in network.edges():
-        n1 = network.nodes(data=True)[e[0]]
-        n2 = network.nodes(data=True)[e[1]]
-        n1_lat, n1_long = n1.get("Latitude"), n1.get("Longitude")
-        n2_lat, n2_long = n2.get("Latitude"), n2.get("Longitude")
-        distance = geodesic((n1_lat, n1_long), (n2_lat, n2_long)).meters  # in meters
-        delay = (
-            distance / SPEED_OF_LIGHT * 1000
-        ) * PROPAGATION_FACTOR  # in milliseconds
-        newnetwork.add_edge(mapping[e[0]], mapping[e[1]], latency=float(delay))
-
-    nx.write_gpickle(newnetwork, outputfile)
+                graph.add_edge(mainIndex, secondIndex, latency=50.0) #NOTE: Latency placeholder for now
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--seed", type=int, nargs="?", default=0)
-    parser.add_argument("--inputfile", type=str, nargs="?", default="dummy", const=1) #BM: Added a default to this argument as it is better to do so
     parser.add_argument(
-        "--outputfile", type=str, nargs="?", const=1, default=r"./data/network.gpickle"
+        "--outputfile", type=str, default=DEFAULTOUTPUTFILE
+    )
+    parser.add_argument(
+        "--CPUDist", type=list[int], nargs=2, default=[50, 100]
+    )
+    parser.add_argument(
+        "--nNodes", type=int, default=10
     )
     args = parser.parse_args()
-    cpu = (1, 500)
-    memory = (1, 64)
-    bandwidth = (1, 1000)
 
-    if args.inputfile.endswith(".graphml"):
-        graphml_reader(
-            args.seed, cpu, memory, bandwidth, args.inputfile, args.outputfile
-        )
-    if args.inputfile.endswith(".gml"):
-        gml_reader(args.seed, cpu, memory, bandwidth, args.inputfile, args.outputfile)
-    else:
-        generate_graph(args.outputfile)
+    CPUs = generateCPUs(args.nNodes, args.CPUDist)
+
+    generate_graph(args.outputfile, CPUs)
