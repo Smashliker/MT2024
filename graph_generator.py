@@ -5,13 +5,14 @@ import argparse
 
 import pickle
 import sys
+from typing import List
 
 DEFAULTOUTPUTFILE = r"./data/network"
 
 
 def generate_graph(
         outputfile: str = DEFAULTOUTPUTFILE,
-        CPUs: list[float] = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95] #These default values imitate results from a U[50, 100] distribution
+        CPUs: List[float] = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95] #These default values imitate results from a U[50, 100] distribution
         ) -> None:
     """
     Function that creates a graph in outputfile with amount of nodes equal to length of the lists.
@@ -44,8 +45,8 @@ def generate_graph(
 #TODO: Make generic
 def generateCPUs(
         nNodes: int = 10,
-        CPUDist: list[int] = [50, 100]   
-        ) -> list[float]:
+        CPUDist: List[int] = [50, 100]   
+        ) -> List[float]:
     """
     Function that creates a list with uniformly distributed values in the range defined by CPUDist.
     """
@@ -78,7 +79,7 @@ if __name__ == "__main__":
         "--outputfile", type=str, default=DEFAULTOUTPUTFILE
     )
     parser.add_argument(
-        "--CPUDist", type=list[int], nargs=2, default=[50, 100]
+        "--CPUDist", type=List[int], nargs=2, default=[50, 100]
     )
     parser.add_argument(
         "--nNodes", type=int, default=10
