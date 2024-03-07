@@ -1,5 +1,5 @@
 geopy
-setuptools==65.5.1
+setuptools==65.5.0
 pip==21
 wheel>=0.38.0
 stable-baselines3==1.5.0
