@@ -6,7 +6,7 @@ from collections.abc import Generator
 
 import numpy as np
 
-from nfvdeep.environment.sc import ServiceChain
+from environment.sc import ServiceChain
 
 
 class ArrivalProcess(Generator):

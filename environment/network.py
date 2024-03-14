@@ -7,7 +7,7 @@ from typing import List
 
 import networkx as nx
 
-from nfvdeep.environment.sc import ServiceChain
+from environment.sc import ServiceChain
 
 import pickle
 

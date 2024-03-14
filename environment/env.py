@@ -7,8 +7,8 @@ from gym import spaces
 import numpy as np
 import numpy.typing as npt
 
-from nfvdeep.environment.network import Network
-from nfvdeep.environment.arrival import ArrivalProcess
+from environment.network import Network
+from environment.arrival import ArrivalProcess
 
 
 

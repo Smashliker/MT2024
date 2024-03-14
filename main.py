@@ -5,9 +5,9 @@ from pathlib import Path
 import stable_baselines3
 from stable_baselines3.common.callbacks import EvalCallback
 
-from nfvdeep.environment.env import Env
-from nfvdeep.environment.arrival import *
-from nfvdeep.environment.monitor import EvalLogCallback, StatsWrapper
+from environment.env import Env
+from environment.arrival import *
+from environment.monitor import EvalLogCallback, StatsWrapper
 
 DEFAULTTOTALTIMESTEPS = 1000000
 DEFAULTNETWORKPATH = "data/network.gpickle"
