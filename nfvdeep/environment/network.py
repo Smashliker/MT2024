@@ -3,6 +3,8 @@ import functools
 from collections import Counter
 from networkx.exception import NetworkXNoPath
 
+from typing import List
+
 import networkx as nx
 
 from nfvdeep.environment.sc import ServiceChain
@@ -11,194 +13,111 @@ import pickle
 
 
 class Network:
-    def __init__(self, networkPath, costs={"cpu": 0.2, "memory": 0.2, "bandwidth": 0.0006}):
-        """Internal representation of the network & embedded VNFs.
+    def __init__(
+            self,
+            networkPath: str,
+            costs: dict[str, float] = {"cpu": 0.2, "memory": 0.2, "bandwidth": 0.0006}):
 
-        Args:
-          overlay (str or networkx graph): Path to an overlay graph that specifies the network's properties
-                or a valid networkx graph.
-          costs (tuple of float): The cost for one unit of cpu, memory and bandwidth"""
-
-        # parse and validate the overlay network
-        self.overlay, properties = Network.check_overlay(networkPath)
-        self.num_nodes = properties["num_nodes"]
+        self.overlay, properties = Network.checkOverlay(networkPath)
+        self.numNodes = properties["num_nodes"]
 
         self.timestep = 0
         self.costs = costs
 
-        # the service function chains with its mapping to the network nodes:
-        self.sfc_embedding = dict()
+        self.scAllocation: dict[ServiceChain, List[int]] = dict()
 
-    def update(self, time_increment=1):
-        """Let the network run for the given time"""
+    def checkTTL(
+            self,
+            sc: ServiceChain
+            ) -> bool:
 
-        # TODO: increment timestep before / after updating SFCs?
-        self.timestep += time_increment
+            return sc.arrival_time + sc.ttl >= self.timestep
 
-        # delete all SFCs that exceed their TTL
-        def check_ttl(sfc):
-            return sfc.arrival_time + sfc.ttl >= self.timestep
+    def update(
+            self,
+            timeIncrement: int =1
+            ) -> None:
 
-        sfc_embedding = {
-            sfc: nodes for sfc, nodes in self.sfc_embedding.items() if check_ttl(sfc)
+        self.timestep += timeIncrement
+
+        scAllocation = {
+            sc: nodes for sc, nodes in self.scAllocation.items() if self.checkTTL(sc)
         }
 
-        self.sfc_embedding = sfc_embedding
+        self.scAllocation = scAllocation
 
-    def embed_vnf(self, sfc: ServiceChain, vnf: tuple, node: int):
-        """Embeds the Virtual Network Function to a specified node."""
-
-        # reject an embedding if the network does not provide sufficient VNF resources or the action
-        # voluntarily chooses no embedding
-        if node >= self.num_nodes or not self.check_vnf_resources(vnf, sfc, node):
+    def allocateVNF(
+            self,
+            sc: ServiceChain,
+            vnf: List[float],
+            node: int
+            ) -> bool:
+        
+        if node >= self.numNodes or not self.checkIfAnyNodeCanAllocateVNF(vnf, node):
             return False
 
-        if sfc not in self.sfc_embedding:
-            self.sfc_embedding[sfc] = []
+        if sc not in self.scAllocation:
+            self.scAllocation[sc] = []
 
-        self.sfc_embedding[sfc].append(node)
+        self.scAllocation[sc].append(node)
 
         return True
 
-    def calculate_resources(self, remaining=True) -> list:
-        """Calculates the remaining resources for all nodes.
+    def calculateAllNodeResources(
+            self, 
+            remaining=True
+            ) -> List[dict[str, float]]:
 
-        Returns:
-            List of dictionaries s.t. the i-th entry is a representation of the remaining resources of the i-th node
-        """
         resources = [
-            {res: max_val for res, max_val in res.items()}
+            {res: maxVal for res, maxVal in res.items()}
             for _, res in self.overlay.nodes(data=True)
         ]
 
         if remaining:
-            # calculated remaining resources
-            for sfc, nodes in self.sfc_embedding.items():
-                for vnf_idx, node_idx in enumerate(nodes):
-                    resources[node_idx]["cpu"] -= sfc.vnfs[vnf_idx][0]
+            for sc, nodes in self.scAllocation.items():
+                for vnfIndex, nodeIndex in enumerate(nodes):
+                    resources[nodeIndex]["cpu"] -= sc.vnfs[vnfIndex][0] #NOTE: Lack of generalization
 
         return resources
+    
+    def canAllocate(
+            self, 
+            sc: ServiceChain, 
+            vnfOffset: int = 0
+            ) -> bool:
+        
+        vnfs = sc.vnfs[vnfOffset:]
 
-    def check_sfc_constraints(self, sfc):
-        """Check whether the (partial) SFC embedding satisfies the bandwidth and latency constraints, i.e.
-        if the bandwidth demand can be satisfied by ANY node and if the SFC can still satisfy its latency constraints.
-        """
+        #TODO: This current implementation does not take chaining into account apparently, allocations may happen anywhere
 
-        # check if there exists a node which can cover the request's bandwidth demand
-        resources = self.calculate_resources()
-        max_available_bandwidth = max([res["cpu"] for res in resources]) #originally bandwidth
-        bandwidth_constraint = True
+        VNFisOK = True #NOTE: This value defaults to true since it assumes that this is the last VNF until proven otherwise
+        if len(vnfs) > 0:
+            nextVNF = next(iter(vnfs))
+            VNFisOK = self.checkIfAnyNodeCanAllocateVNF(nextVNF)
 
-        # check if the current bandwidth constrains hold
-        if not all([node["cpu"] >= 0 for node in resources]):
-            return False
+        #TODO: May add logic for SC values here
+        SCisOK = True
 
-        # distinguish whether SFC is already (partially) embedded or a novel request
-        if sfc not in self.sfc_embedding:
-            # solely verify bandwidth constraint for novel requests
-            return bandwidth_constraint
+        return VNFisOK and SCisOK
 
-        # if there is a next VNF and it can be embedded to the same node as the previous VNF,
-        # no additional bandwidth is demanded
-        elif not bandwidth_constraint and len(self.sfc_embedding[sfc]) < len(sfc.vnfs):
-            last_node = self.sfc_embedding[sfc][-1]
-            next_vnf = sfc.vnfs[len(self.sfc_embedding[sfc])]
-            bandwidth_constraint = self.check_vnf_resources(next_vnf, sfc, last_node)
-
-        # also verify the latency constraints for a (partially) embedded SFC, i.e.
-        # does the latency of prior VNF embeddings violate the maximum latency of the request?
-        try:
-            latency = self.calculate_current_latency(sfc)
-            latency_constraint = latency <= 100 #sfc.max_response_latency, arbitrary
-        except NetworkXNoPath:
-            latency_constraint = False
-
-        return bandwidth_constraint and latency_constraint
-
-    def calculate_current_latency(self, sfc):
-        """Calculates the current latency of the SFC i.e the end to end delay from the start of the SFC to the currently
-         last embedded VNF of the SFC
-
-        Throws NetworkXNoPath, if there is no possible path between two VNFs"""
-
-        latency = 0
-
-        return 100000 #arbitrarily high number
-
-        # compute transmission and processing delay if the SFC is already (partially) embedded
-        if sfc in self.sfc_embedding:
-            nodes = self.sfc_embedding[sfc]
-            latency = sum(
-                [
-                    nx.dijkstra_path_length(
-                        self.overlay, nodes[idx - 1], nodes[idx], weight="latency"
-                    )
-                    for idx in range(1, len(nodes))
-                ]
-            )
-
-            latency += sum(sfc.processing_delays[: len(nodes)])
-
-        return latency
-
-    def check_embeddable(self, sfc: ServiceChain, vnf_offset=0):
-        """Check whether the (partial) SFC embedding can still satisfy its constraints, i.e. check if for all remaining VNFs
-        some node with sufficient resources exists and if the SFC constraints can still be satisfied.
-        """
-        vnfs = sfc.vnfs[vnf_offset:]
-        # check whether remaining resources are sufficient to embed further VNFs
-        # TODO: we check only if there exists a node that provides sufficient resources for the next VNF
-        # TODO: the paper does not specifiy how exactly this test is done, i.e. how to specify
-        # that the agent will only be invoked if a valid embedding exists
-        vnf_constraints = len(vnfs) <= 0
-        if not vnf_constraints:
-            next_vnf = next(iter(vnfs))
-            vnf_constraints = self.check_vnf_resources(next_vnf, sfc)
-
-        # check whether SFC can still fullfill service constraints (SFC constraints)
-        sfc_constraints = True #self.check_sfc_constraints(sfc)
-
-        return vnf_constraints and sfc_constraints
-
-    def check_vnf_resources(self, vnf, sfc, node=None):
-        """Check whether some node exists with sufficient resources or if the specified node provides enough resources."""
-
-        resources = self.calculate_resources()
+    def checkIfAnyNodeCanAllocateVNF(
+            self, 
+            vnf: List[float], 
+            node=None
+            ) -> bool:
+        
+        resources = self.calculateAllNodeResources()
         if node is not None:
             resources = [resources[node]]
 
-        def constraints(res, vnf):
-            return all([res["cpu"] >= vnf[0]])
+        nodes = set(num for num, res in enumerate(resources) if VNFConstraints(res, vnf))
 
-        nodes = set(num for num, res in enumerate(resources) if constraints(res, vnf))
+        return bool(nodes) #TODO: Simplify
 
-        return bool(nodes)
 
-    def calculate_occupied_resources(self):
-        """Calculates a dictionary that summarizes the amount of occupied resources per type."""
-
-        # compute the amount of maximum resources / available resources per node
-        resources = self.calculate_resources(remaining=False)
-        avail_resources = self.calculate_resources(remaining=True)
-
-        # reduce the respective resources over the entire network (i.e. summed over all nodes)
-        resources = dict(functools.reduce(operator.add, map(Counter, resources)))
-        avail_resources = dict(
-            functools.reduce(operator.add, map(Counter, avail_resources))
-        )
-
-        # get the amount of depleted resources and their costs
-        depleted = {key: resources[key] - avail_resources[key] for key in resources}
-        costs = {key: depleted[key] * self.costs[key] for key in depleted}
-
-        return costs
-
-    def calculate_resource_utilization(self):
-        """Calculates a dictionary that summarizes the resource utilization per resource type."""
-
-        # compute the amount of maximum resources / available resources per node
-        max_resources = self.calculate_resources(remaining=False)
-        avail_resources = self.calculate_resources(remaining=True)
+    def calculateUtilization(self) -> dict[str, float]:
+        max_resources = self.calculateAllNodeResources(remaining=False)
+        avail_resources = self.calculateAllNodeResources(remaining=True)
 
         max_resources = dict(
             functools.reduce(operator.add, map(Counter, max_resources))
@@ -207,7 +126,6 @@ class Network:
             functools.reduce(operator.add, map(Counter, avail_resources))
         )
 
-        # compute resource utilization per type as a dictionary
         utilization = {
             key: (max_resources[key] - avail_resources[key]) / max_resources[key]
             for key in max_resources
@@ -215,71 +133,66 @@ class Network:
 
         return utilization
 
-    def get_operating_servers(self):
-        """Computes the set of indices that describe all operating servers."""
-        operating_servers = {
-            server for sfc in self.sfc_embedding for server in self.sfc_embedding[sfc]
+    def getOperatingServers(self) -> set[int]:
+        operatingServers = {
+            server for sc in self.scAllocation for server in self.scAllocation[sc]
         }
-        return operating_servers
+        return operatingServers
 
-    def calculate_resource_costs(self):
-        """Computes a dictionary that summarizes the current operation costs per resource type."""
-        # get a set of currently operating nodes
-        operating_servers = self.get_operating_servers()
+    def calculateCosts(self) -> dict[str, float]:
+        operatingServers = self.getOperatingServers()
 
-        if not operating_servers:
+        if not operatingServers:
             return {key: 0 for key in self.costs}
 
-        # filter the maximum available resources with respect to the operating servers
+        # filter out non-operating servers
         resources = [
             res
-            for idx, res in enumerate(self.calculate_resources(remaining=False))
-            if idx in operating_servers
+            for idx, res in enumerate(self.calculateAllNodeResources(remaining=False))
+            if idx in operatingServers
         ]
 
-        # reduce the amount of resources per type
+        #TODO: Figure this one out, very unfamiliar set operations
         resources = dict(functools.reduce(operator.add, map(Counter, resources)))
 
-        # calculate the cost per resource type
         cost = {res: resources[res] * self.costs[res] for res in resources}
 
         return cost
 
     @staticmethod
-    def check_overlay(overlay):
-        """Checks whether the overlay adhers to the expected parameter types and attributes, returns the parsed network instance."""
+    def checkOverlay(overlay: str) -> tuple[nx.Graph, dict[str, float]]:
+        with open(overlay, 'rb') as f:
+            overlay = pickle.load(f)
 
-        # parse overlay from gpickle if
-        if isinstance(overlay, str) and overlay.endswith(".gpickle"):
-            """
-            BM: This function is deprecated, it is replaced below
-            overlay = nx.read_gpickle(overlay)
-            """
-            with open(overlay, 'rb') as f:
-                overlay = pickle.load(f)
-
-        node_attributes = {"cpu": float}
+        nodeAttributes = {"cpu": float}
         for _, data in overlay.nodes(data=True):
             assert all(
-                [nattr in data for nattr, ntype in node_attributes.items()]
+                [nattr in data for nattr, _ in nodeAttributes.items()]
             ), "Overlay must specify all required node attributes."
             assert all(
-                [type(data[nattr]) == ntype for nattr, ntype in node_attributes.items()]
+                [type(data[nattr]) == ntype for nattr, ntype in nodeAttributes.items()]
             ), "Overlay must specify the correct data types."
 
-        edge_attributes = {"latency": float}
+        edgeAttributes = {"latency": float}
         for _, _, data in overlay.edges(data=True):
             assert all(
-                [eattr in data for eattr, etype in edge_attributes.items()]
+                [eattr in data for eattr, _ in edgeAttributes.items()]
             ), "Overlay must specify all required edge attributes."
             assert all(
-                [type(data[eattr]) == etype for eattr, etype in edge_attributes.items()]
+                [type(data[eattr]) == etype for eattr, etype in edgeAttributes.items()]
             ), "Overlay must specify the correct data types."
 
-        # compute properties of the parsed graph
         properties = {}
         properties["num_nodes"] = overlay.number_of_nodes()
         _, resource = next(iter(overlay.nodes(data=True)))
         properties["num_node_resources"] = len(resource)
 
         return overlay, properties
+
+
+def VNFConstraints(
+        res: dict[str, float], 
+        vnf: List[float]
+        ) -> bool:
+    
+    return res["cpu"] >= vnf[0]

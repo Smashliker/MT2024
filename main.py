@@ -1,4 +1,3 @@
-import inspect
 import logging
 import argparse
 from pathlib import Path
@@ -43,7 +42,7 @@ def main(
     env = Env(networkPath, arrival_config)
 
     evalEnv = StatsWrapper(Env(networkPath, arrival_config))
-    evalLogCallback = EvalLogCallback(log_path=f"{output}/evaluation")
+    evalLogCallback = EvalLogCallback()
     evalCallback = EvalCallback(
         evalEnv,
         n_eval_episodes=nEvalEpisodes,

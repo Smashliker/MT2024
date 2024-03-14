@@ -1,53 +1,56 @@
-from pathlib import Path
 from typing import List
 from collections import defaultdict
 
 import gym
+
 import numpy as np
-from tabulate import tabulate
+import numpy.typing as npt
+
 from stable_baselines3.common.callbacks import BaseCallback
 
+STATS = ["accepted", "rejected", "operating_servers"]
+COSTS = ["cpu_cost", "memory_cost", "bandwidth_cost"]
+UTILIZATIONS = ["cpu_utilization", "memory_utilization", "bandwidth_utilization"]
 
 class StatsWrapper(gym.Wrapper):
-    STATS = ["accepted", "rejected", "operating_servers"]
-    COSTS = ["cpu_cost", "memory_cost", "bandwidth_cost"]
-    UTILIZATIONS = ["cpu_utilization", "memory_utilization", "bandwidth_utilization"]
-
     def __init__(self, env: gym.Env):
         super().__init__(env)
 
         self.placements = {}
         self.statistics = defaultdict(float)
 
-    def clear(self):
+    def clear(self) -> None:
         self.placements = {}
         self.statistics = defaultdict(float)
 
-    def step(self, action):
+    def step(
+            self, 
+            action: int
+            ) -> tuple[npt.NDArray[any], float, bool, dict[str, bool]]:
         obs, reward, done, info = super().step(action)
 
         keys = [
-            key for key in info if key in self.STATS + self.COSTS + self.UTILIZATIONS
+            key for key in info if key in STATS + COSTS + UTILIZATIONS
         ]
         for key in keys:
             self.statistics[key] += info[key]
 
         self.statistics["ep_length"] += 1
 
-        if "sfc" in info:
-            self.placements[info["sfc"]] = info["placements"]
+        if "sc" in info:
+            self.placements[info["sc"]] = info["placements"]
 
         return obs, reward, done, info
 
 
 class EvalLogCallback(BaseCallback):
-    def __init__(self, log_path: str, verbose: int = 0):
+    def __init__(
+            self,
+            verbose: int = 0):
+        
         super().__init__(verbose)
-        self.log_path = Path(log_path) / "placements.txt"
-        self.niter = 0
 
-    def _on_step(self):
-
+    def _on_step(self) -> None:
         eval_envs: List[StatsWrapper] = self.locals["callback"].eval_env.envs
         assert all([isinstance(env, StatsWrapper) for env in eval_envs])
 
@@ -70,7 +73,7 @@ class EvalLogCallback(BaseCallback):
         costs = [
             {
                 key: env.statistics[key] / env.statistics["ep_length"]
-                for key in env.COSTS
+                for key in COSTS
             }
             for env in eval_envs
         ]
@@ -80,7 +83,7 @@ class EvalLogCallback(BaseCallback):
             self.logger.record("eval/mean_{}".format(key), value)
 
         occupied = [
-            {key: env.statistics[key] for key in env.UTILIZATIONS} for env in eval_envs
+            {key: env.statistics[key] for key in UTILIZATIONS} for env in eval_envs
         ]
         occupied = {key: np.mean([dic[key] for dic in occupied]) for key in occupied[0]}
 
@@ -95,41 +98,5 @@ class EvalLogCallback(BaseCallback):
         )
         self.logger.record("eval/mean_operating_servers", operating)
 
-        placements = [env.placements for env in eval_envs]
-        self.save_placements(placements)
-
         for env in eval_envs:
             env.clear()
-
-        self.niter += 1
-
-    def save_placements(self, placements: List) -> None:
-        table = []
-        for ep, episode in enumerate(placements):
-            for sfc, placement in episode.items():
-                row = [
-                    self.niter,
-                    ep,
-                    sfc.arrival_time,
-                    sfc.ttl,
-                    #sfc.bandwidth_demand,
-                    #sfc.max_response_latency,
-                    sfc.vnfs,
-                    placement,
-                ]
-                table.append(row)
-
-        headers = [
-            "Eval. Iter",
-            "Episode",
-            "Arrival",
-            "TTL",
-            #"Bandwidth",
-            #"Max Latency",
-            "VNFs",
-            "Placements",
-        ]
-        table = "\n\n" + tabulate(table, headers=headers)
-
-        with open(str(self.log_path), "a") as file:
-            file.write(table)
