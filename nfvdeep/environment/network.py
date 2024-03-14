@@ -5,13 +5,13 @@ from networkx.exception import NetworkXNoPath
 
 import networkx as nx
 
-from nfvdeep.environment.sfc import ServiceFunctionChain
+from nfvdeep.environment.sc import ServiceChain
 
 import pickle
 
 
 class Network:
-    def __init__(self, overlay, costs={"cpu": 0.2, "memory": 0.2, "bandwidth": 0.0006}):
+    def __init__(self, networkPath, costs={"cpu": 0.2, "memory": 0.2, "bandwidth": 0.0006}):
         """Internal representation of the network & embedded VNFs.
 
         Args:
@@ -20,7 +20,7 @@ class Network:
           costs (tuple of float): The cost for one unit of cpu, memory and bandwidth"""
 
         # parse and validate the overlay network
-        self.overlay, properties = Network.check_overlay(overlay)
+        self.overlay, properties = Network.check_overlay(networkPath)
         self.num_nodes = properties["num_nodes"]
 
         self.timestep = 0
@@ -45,7 +45,7 @@ class Network:
 
         self.sfc_embedding = sfc_embedding
 
-    def embed_vnf(self, sfc: ServiceFunctionChain, vnf: tuple, node: int):
+    def embed_vnf(self, sfc: ServiceChain, vnf: tuple, node: int):
         """Embeds the Virtual Network Function to a specified node."""
 
         # reject an embedding if the network does not provide sufficient VNF resources or the action
@@ -76,16 +76,6 @@ class Network:
             for sfc, nodes in self.sfc_embedding.items():
                 for vnf_idx, node_idx in enumerate(nodes):
                     resources[node_idx]["cpu"] -= sfc.vnfs[vnf_idx][0]
-                    resources[node_idx]["memory"] -= sfc.vnfs[vnf_idx][1]
-
-                    # bandwidth is demanded if successive VNFs are embedded on different servers, i.e.
-                    # no bandwidth is required if the VNF is placed on the same server as the previous VNF,
-                    # unless for the last VNF of the chain, for whom we always demand bandwidth
-                    if vnf_idx == len(nodes) - 1:
-                        resources[node_idx]["bandwidth"] -= sfc.bandwidth_demand
-
-                    elif not nodes[vnf_idx] == nodes[vnf_idx + 1]:
-                        resources[node_idx]["bandwidth"] -= sfc.bandwidth_demand
 
         return resources
 
@@ -96,11 +86,11 @@ class Network:
 
         # check if there exists a node which can cover the request's bandwidth demand
         resources = self.calculate_resources()
-        max_available_bandwidth = max([res["bandwidth"] for res in resources])
-        bandwidth_constraint = sfc.bandwidth_demand <= max_available_bandwidth
+        max_available_bandwidth = max([res["cpu"] for res in resources]) #originally bandwidth
+        bandwidth_constraint = True
 
         # check if the current bandwidth constrains hold
-        if not all([node["bandwidth"] >= 0 for node in resources]):
+        if not all([node["cpu"] >= 0 for node in resources]):
             return False
 
         # distinguish whether SFC is already (partially) embedded or a novel request
@@ -119,7 +109,7 @@ class Network:
         # does the latency of prior VNF embeddings violate the maximum latency of the request?
         try:
             latency = self.calculate_current_latency(sfc)
-            latency_constraint = latency <= sfc.max_response_latency
+            latency_constraint = latency <= 100 #sfc.max_response_latency, arbitrary
         except NetworkXNoPath:
             latency_constraint = False
 
@@ -132,6 +122,8 @@ class Network:
         Throws NetworkXNoPath, if there is no possible path between two VNFs"""
 
         latency = 0
+
+        return 100000 #arbitrarily high number
 
         # compute transmission and processing delay if the SFC is already (partially) embedded
         if sfc in self.sfc_embedding:
@@ -149,7 +141,7 @@ class Network:
 
         return latency
 
-    def check_embeddable(self, sfc: ServiceFunctionChain, vnf_offset=0):
+    def check_embeddable(self, sfc: ServiceChain, vnf_offset=0):
         """Check whether the (partial) SFC embedding can still satisfy its constraints, i.e. check if for all remaining VNFs
         some node with sufficient resources exists and if the SFC constraints can still be satisfied.
         """
@@ -164,7 +156,7 @@ class Network:
             vnf_constraints = self.check_vnf_resources(next_vnf, sfc)
 
         # check whether SFC can still fullfill service constraints (SFC constraints)
-        sfc_constraints = self.check_sfc_constraints(sfc)
+        sfc_constraints = True #self.check_sfc_constraints(sfc)
 
         return vnf_constraints and sfc_constraints
 
@@ -176,7 +168,7 @@ class Network:
             resources = [resources[node]]
 
         def constraints(res, vnf):
-            return all([res["cpu"] >= vnf[0], res["memory"] >= vnf[1]])
+            return all([res["cpu"] >= vnf[0]])
 
         nodes = set(num for num, res in enumerate(resources) if constraints(res, vnf))
 
@@ -266,7 +258,7 @@ class Network:
             with open(overlay, 'rb') as f:
                 overlay = pickle.load(f)
 
-        node_attributes = {"cpu": int, "memory": float, "bandwidth": float}
+        node_attributes = {"cpu": float}
         for _, data in overlay.nodes(data=True):
             assert all(
                 [nattr in data for nattr, ntype in node_attributes.items()]

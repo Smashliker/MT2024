@@ -112,8 +112,8 @@ class EvalLogCallback(BaseCallback):
                     ep,
                     sfc.arrival_time,
                     sfc.ttl,
-                    sfc.bandwidth_demand,
-                    sfc.max_response_latency,
+                    #sfc.bandwidth_demand,
+                    #sfc.max_response_latency,
                     sfc.vnfs,
                     placement,
                 ]
@@ -124,8 +124,8 @@ class EvalLogCallback(BaseCallback):
             "Episode",
             "Arrival",
             "TTL",
-            "Bandwidth",
-            "Max Latency",
+            #"Bandwidth",
+            #"Max Latency",
             "VNFs",
             "Placements",
         ]

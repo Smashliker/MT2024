@@ -1,5 +1,6 @@
 import logging
 from copy import deepcopy
+import random
 
 import gym
 import numpy as np
@@ -9,27 +10,34 @@ from tabulate import tabulate
 from nfvdeep.environment.network import Network
 from nfvdeep.environment.arrival import ArrivalProcess
 
+from nfvdeep.environment.sc import ServiceChain
+
+SC1 = ServiceChain(0, 15, [[20], [5], [5], [10]])
+SC2 = ServiceChain(0, 5, [[10], [2]])
 
 class Env(gym.Env):
-    def __init__(self, overlay_path, arrival_config):
+    def __init__(
+            self,
+            networkPath: str,
+            arrivalConfig):
         """A new Gym environment. This environment represents the environment of NFVdeep.
 
         Args:
           overlay_path: A connection to the network where the agent will act
           arrival_config: Dictionary that specifies the properties of the requests."""
 
-        self.overlay_path = overlay_path
-        self.arrival_config = arrival_config
+        self.networkPath = networkPath
+        self.arrivalConfig = arrivalConfig
 
         # define action and statespace
-        _, properties = Network.check_overlay(self.overlay_path)
+        _, properties = Network.check_overlay(self.networkPath)
         num_nodes = properties["num_nodes"]
         num_node_resources = properties["num_node_resources"]
 
         # action `num_nodes` refers to volutarily rejecting the VNF embedding
         self.action_space = spaces.Discrete(num_nodes + 1)
 
-        obs_dim = num_nodes * num_node_resources + num_node_resources + 3
+        obs_dim = num_nodes * num_node_resources + num_node_resources + 5 #TODO find out
         self.observation_space = spaces.Box(
             low=0.0, high=1.0, shape=(obs_dim,), dtype=np.float16
         )
@@ -51,16 +59,14 @@ class Env(gym.Env):
             "(SFC, VNF): {} -> Node: ({})".format((self.sfc_idx, self.vnf_idx), action)
         )
 
-        # get the, to be processed, VNF for the current SFC
-        sfc = self.request_batch[self.sfc_idx]
-        vnf = sfc.vnfs[self.vnf_idx]
+        vnf = self.sc.vnfs[self.vnf_idx]
 
         """
         Embed the VNF to the network. An embedding is invalid if either the VNF embedding or there do
         not remain sufficient resources to embed further VNFs of the current SFC / the SFC 
         will not satisfy its constraints (e.g. TTL constraint).
         """
-        is_valid_sfc = self.vnf_backtrack.embed_vnf(sfc, vnf, action)
+        is_valid_sfc = self.vnf_backtrack.embed_vnf(self.sc, vnf, action)
         logging.debug(
             "VNF embedding of {} to `vnf_backtrack` network on node: {} was {}.".format(
                 self.vnf_idx, action, is_valid_sfc
@@ -71,7 +77,7 @@ class Env(gym.Env):
             # check whether a valid SFC embedding remains possible after embedding the VNF, i.e.
             # if sufficient resources remain and the SFC constraints (e.g. latency) can still be satisfied
             is_valid_sfc = self.vnf_backtrack.check_embeddable(
-                sfc, vnf_offset=self.vnf_idx + 1
+                self.sc, vnf_offset=self.vnf_idx + 1
             )
 
             logging.debug(
@@ -84,8 +90,9 @@ class Env(gym.Env):
         Process the determined action. Backtrack to the latest network state if the action was invalid or progress 
         its state after a successful SFC embedding. 
         """
+        
         # determine whether the, to be processed, VNF is the last VNF of the current SFC
-        is_last_of_sfc = self.vnf_idx >= len(sfc.vnfs) - 1
+        is_last_of_sfc = self.vnf_idx >= len(self.sc.vnfs) - 1
 
         # accept `vnf_backtrack` if the embedding (VNF and SFC) was valid and the SFC embedding is completed
         if is_valid_sfc and is_last_of_sfc:
@@ -94,14 +101,16 @@ class Env(gym.Env):
 
             # update info regarding successful embedding
             info["accepted"] = True
-            info["placements"] = self.vnf_backtrack.sfc_embedding[sfc]
-            info["sfc"] = sfc
+            info["placements"] = self.vnf_backtrack.sfc_embedding[self.sc]
+            info["sfc"] = self.sc
 
-            logging.debug(
-                "Updating network state to `vnf_backtrack` after completing SFC: {}".format(
-                    self.sfc_idx
-                )
-            )
+            #self.sc = deepcopy(random.sample([SC1, SC2], 1)[0]) #BM: Simple arrival
+
+            #logging.debug("Updating network state to `vnf_backtrack` after completing SFC: {}".format(self.sfc_idx))
+
+            #Update self.sc
+            self.done = self.progress_inter_timeslots()
+
 
         # invoke the agent for the next VNF of the current SFC
         elif is_valid_sfc and not is_last_of_sfc:
@@ -114,9 +123,10 @@ class Env(gym.Env):
             # update info regarding unsuccessful embedding
             info["rejected"] = True
             info["placements"] = None
-            info["sfc"] = sfc
+            info["sfc"] = self.sc
 
             self.sfc_idx, self.vnf_idx = (self.sfc_idx + 1, 0)
+            self.done = self.progress_inter_timeslots()
 
             logging.debug("Backtracking `vnf_backtrack` to the latest network state")
 
@@ -130,15 +140,16 @@ class Env(gym.Env):
         """
         # progress to next SFC within the request batch that can be embedded succsessfully
         # , i.e. progress within the intra timeslot
-        batch_completed = self.progress_intra_timeslot()
+        #batch_completed = self.progress_intra_timeslot()
 
         # determine the agent's reward before progressing time
         self.reward = self.compute_reward(
-            sfc, is_last_of_sfc, is_valid_sfc, batch_completed
+            self.sc, is_last_of_sfc, is_valid_sfc, False #batch_completed
         )
         logging.debug("Environment will attribute reward: {}".format(self.reward))
 
         # progress inter timeslots until a `request_batch` with embeddable SFCs arrives
+        """
         if batch_completed:
             while True:
                 self.done = self.progress_inter_timeslots()
@@ -148,7 +159,8 @@ class Env(gym.Env):
                 batch_completed = self.progress_intra_timeslot()
                 if not batch_completed or self.done:
                     break
-
+        """
+                    
         # log the occupied resources and operation costs, log the number of operating nodes
         resource_utilization = self.vnf_backtrack.calculate_resource_utilization()
         resource_costs = self.vnf_backtrack.calculate_resource_costs()
@@ -166,27 +178,26 @@ class Env(gym.Env):
 
         self.done = False
         # initialize arrival process that will generate SFC requests
-        self.arrival_process = ArrivalProcess.factory(self.arrival_config)
+        self.arrival_process = ArrivalProcess.factory(self.arrivalConfig)
 
         # initialize network and backtracking network, s.t. `vnf_backtrack` is updated after each successful VNF embedding
-        self.network = Network(self.overlay_path)
+        self.network = Network(self.networkPath)
         self.vnf_backtrack = deepcopy(self.network)
 
         # track indices for current SFC & VNF
         self.sfc_idx, self.vnf_idx = 0, 0
 
         # current batch of SFC requests, i.e. list of SFC objects to be processed
-        self.request_batch = []
+        #self.request_batch = []
 
         # progress time until first batch of requests arrives
         self.progress_inter_timeslots()
 
         return self.compute_state()
 
+    """
     def progress_intra_timeslot(self):
-        """Progress (SFC, VNF) indices to the next combination in the request batch that requires an
-        invokation of the agent.
-        """
+        #Progress (SFC, VNF) indices to the next combination in the request batch that requires an invokation of the agent.
 
         # progress the SFC indices to a SFC for whom an interaction with the agent is required,
         # i.e. there exists a valid embedding
@@ -204,20 +215,24 @@ class Env(gym.Env):
         batch_completed = self.sfc_idx >= len(self.request_batch) - 1
         self.sfc_idx, self.vnf_idx = 0, 0
         return batch_completed
+    """
 
     def progress_inter_timeslots(self):
-        """Progress `request_batch` and `network` over inter timeslots, i.e. until novel requests arrive."""
+        #Progress `request_batch` and `network` over inter timeslots, i.e. until novel requests arrive.
         # empty the `request_batch` since we assume that all requests have been processed
-        self.request_batch = []
+        self.sc = None
 
         try:
-            while len(self.request_batch) <= 0:
+            while self.sc == None:
                 self.network.update()
-                self.request_batch = next(self.arrival_process)
+                batch = next(self.arrival_process)
+
+                if len(batch) > 0:
+                    self.sc = deepcopy(batch[0])
 
                 logging.debug(
-                    "Progressing time, next SFC request batch: {}".format(
-                        self.request_batch
+                    "Progressing time, next SFC request: {}".format(
+                        self.sc
                     )
                 )
 
@@ -230,7 +245,7 @@ class Env(gym.Env):
             return True
 
     def render(self, mode="human"):
-        req_batch = str(self.request_batch)
+        req_batch = str(self.sc) #str(self.request_batch)
         resources = [
             [
                 num,
@@ -319,18 +334,18 @@ class Env(gym.Env):
         network_resources = network_resources.reshape(-1)
 
         # compute (normalized) information regarding the VNF which is to be placed next
-        sfc = self.request_batch[self.sfc_idx]
-        vnf = sfc.vnfs[self.vnf_idx]
+        #sfc = self.request_batch[self.sfc_idx]
+        vnf = self.sc.vnfs[self.vnf_idx]
 
-        norm_vnf_resources = np.asarray([*vnf, sfc.bandwidth_demand])
+        norm_vnf_resources = np.asarray([*vnf, 0])#self.sc.bandwidth_demand])
         norm_vnf_resources = list(norm_vnf_resources / max_resources)
 
         # TODO: parameterize normalization of constants such as TTL?
         norm_residual_latency = (
-            sfc.max_response_latency - self.vnf_backtrack.calculate_current_latency(sfc)
+            1000 #self.sc.max_response_latency - self.vnf_backtrack.calculate_current_latency(self.sc)
         ) / 1000
-        norm_undeployed = (len(sfc.vnfs) - (self.vnf_idx + 1)) / 7
-        norm_ttl = sfc.ttl / 1000
+        norm_undeployed = (len(self.sc.vnfs) - (self.vnf_idx + 1)) / 7 #TODO: 7 hardcoded
+        norm_ttl = self.sc.ttl / 1000
 
         observation = np.concatenate(
             (
@@ -356,7 +371,7 @@ class Env(gym.Env):
         if not (last_in_sfc and sfc_valid):
             reward = 0
         else:
-            reward = (sfc.ttl * sfc.bandwidth_demand) / 10
+            reward = 1 #(sfc.ttl * sfc.bandwidth_demand) / 10
 
         if batch_completed:
             # compute total operation costs of the network first from individual costs of each resource

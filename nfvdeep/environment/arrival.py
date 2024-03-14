@@ -6,7 +6,7 @@ from collections.abc import Generator
 
 import numpy as np
 
-from nfvdeep.environment.sfc import ServiceFunctionChain
+from nfvdeep.environment.sc import ServiceChain
 
 
 class ArrivalProcess(Generator):
@@ -49,7 +49,7 @@ class ArrivalProcess(Generator):
         raise StopIteration
 
     @staticmethod
-    def factory(config):
+    def factory(config: str):
         """Factory method to allow for an easier generation of different arrival processes."""
 
         if "type" not in config:
@@ -97,7 +97,7 @@ class JSONArrivalProcess(ArrivalProcess):
         req = []
         for sfc in requests:
             vnfs = parse_vnfs(sfc.pop("vnfs"))
-            sfc = ServiceFunctionChain(vnfs=vnfs, **sfc)
+            sfc = ServiceChain(vnfs=vnfs, **sfc)
 
             req.append(sfc)
 
@@ -119,7 +119,7 @@ class StochasticProcess(ArrivalProcess):
         while len(req) < self.num_requests:
             arrival_time, ttl = next(arrival_gen)
             sfc_params = next(load_gen)
-            sfc = ServiceFunctionChain(arrival_time=arrival_time, ttl=ttl, **sfc_params)
+            sfc = ServiceChain(arrival_time=arrival_time, ttl=ttl, vnfs=sfc_params["vnfs"]) #**sfc_params)
             req.append(sfc)
 
         return req
