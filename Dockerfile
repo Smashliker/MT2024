@@ -34,5 +34,7 @@ EXPOSE 8000
 
 RUN python3 graph_generator.py
 
+VOLUME /app/output/logs
+
 # Run the application.
 CMD python3 main.py
