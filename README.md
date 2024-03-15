@@ -20,7 +20,10 @@ This can be achieved by first building the image:
 If one wants to change arguments in ```main.py```, then one may edit the ```CMD``` line in the Dockerfile directly.
 
 Then the image can be run as a container. After the container finishes execution, the ```tfevents```file required for analyzing the result with tensorboard will be available to the user as a Docker volume:  
-```docker volume ls```
+```docker volume ls```  
+
+After downloading this file, one may start tensorboard by running the following command from the directory of the file:
+```tensorboard --logdir .```
 
 
 The information following below is from the original repository:
