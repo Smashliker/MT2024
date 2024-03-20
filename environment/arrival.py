@@ -8,61 +8,48 @@ import numpy as np
 
 from environment.sc import ServiceChain
 
+from copy import deepcopy
+from typing import List
+
 
 class ArrivalProcess(Generator):
-    """Abstract class that implements the request generation. Inheriting classes implement the parameterization of to be generated SFCs."""
-
-    def __init__(self, **kwargs):
+    def __init__(self):
         self.timeslot = 1
 
-        # generate requests according to abstract method `generate_requests`
-        self.requests = self.generate_requests()
+        #This queue being empty denotes a finished episode
+        self.requests = self.generateRequests()
 
-        # order arriving SFCs according to their arrival time
         self.requests = [
-            ((sfc.arrival_time, num), sfc) for num, sfc in enumerate(self.requests)
+            ((sc.arrivalTime, num), sc) for num, sc in enumerate(self.requests)
         ]
         heapq.heapify(self.requests)
 
-    def send(self, arg):
-        """Implements the generator interface. Generates a list of arriving SFC requests for the
-        respective timeslot starting from timeslot one.
-        """
-        req = []
-
+    def send(
+            self,
+            dummy #This parameter is needed to implement the send method correctly. 
+            ) -> ServiceChain:
+        
         if len(self.requests) <= 0:
             self.throw()
 
-        # add SFCs to the batch until the next SFC has an arrival time that exceeds the internal timestep
-        while (
-            len(self.requests) > 0 and self.requests[0][1].arrival_time <= self.timeslot
-        ):
-            _, sfc = heapq.heappop(self.requests)
-            req.append(sfc)
-
-        # increment internal timeslot
+        _, sc = heapq.heappop(self.requests)
         self.timeslot += 1
-        return req
+        return sc
 
-    def throw(self, type=None, value=None, traceback=None):
-        """Raises an Error iff all SFCs were already generated."""
+    def throw(self):
         raise StopIteration
 
     @staticmethod
-    def factory(config: str):
-        """Factory method to allow for an easier generation of different arrival processes."""
-
+    def factory(config: str) -> Generator: #any class inheriting Generator (ArrivalProcess)
+        #Used primarily for digesting requests.json
         if "type" not in config:
             arrival = JSONArrivalProcess(config)
 
-        arrival_type = config["type"]
+        arrivalType = config["type"]
+
         params = {key: value for key, value in config.items() if key != "type"}
 
-        # set a seed solely if the episodes should be static, i.e. should always get the same requests for each episode
-        if not params["static"]:
-            params["seed"] = None
-
-        if arrival_type == "poisson_arrival_uniform_load":
+        if arrivalType == "poisson_arrival_uniform_load":
             arrival = PoissonArrivalUniformLoad(**params)
 
         else:
@@ -71,90 +58,152 @@ class ArrivalProcess(Generator):
         return arrival
 
     @abstractmethod
-    def generate_requests(self):
-        """Abstract method that must generate a list of SFCs to be emitted."""
+    def generateRequests(self):
         raise NotImplementedError("Must be overwritten by an inheriting class")
 
 
 class JSONArrivalProcess(ArrivalProcess):
-    def __init__(self, request_path):
-        """Instantiate an arrival process that generates SFC requests at their respective arrival timeslot from a specified JSON file."""
-        assert isinstance(request_path, str)
+    def __init__(
+            self,
+            request_path: str = '/data/requests.json'):
+        
         assert request_path.endswith(".json")
         self.request_path = request_path
         super().__init__()
 
-    def generate_requests(self):
-        """Generates SFC objects according to their paramterization as given by a JSON file."""
-        # load SFCs from specified JSON file
+    def generateRequests(self) -> List[ServiceChain]:
         with open(self.request_path, "rb") as file:
             requests = json.load(file)
 
-        def parse_vnfs(vnfs):
-            return [tuple(vnf.values()) for vnf in vnfs]
-
-        # create SFC objects with parameters specified in the JSON file
         req = []
-        for sfc in requests:
-            vnfs = parse_vnfs(sfc.pop("vnfs"))
-            sfc = ServiceChain(vnfs=vnfs, **sfc)
+        for sc in requests:
+            vnfs = sc.pop("vnfs")
+            sc = ServiceChain(vnfs=vnfs, **sc)
 
-            req.append(sfc)
+            req.append(sc)
 
         return req
+    
+    #TODO
+    def parseVNFs(self, vnfs):
+            return [tuple(vnf.values()) for vnf in vnfs]
+
+class UniformLoadGenerator:
+    def __init__(
+        self,
+        sc_length,
+        num_vnfs,
+        max_response_latency,
+        bandwidth,
+        cpus,
+        memory,
+        vnf_delays,
+    ):
+        self.sc_length = sc_length
+        self.num_vnfs = num_vnfs
+        self.bandwidth = bandwidth
+        self.max_response_latency = max_response_latency
+
+        self.cpus = cpus
+        self.memory = memory
+        self.vnf_delays = vnf_delays
+
+    #NOTE: Here the difference between sc_length and num_vnfs is relevant: num_vnfs is to create some pre-defined VNFs which the new SC picks from, while sc_length is the actual length of the SC
+    #TODO: Find out if this uniform generation is useful (creating samples instead of just creating all of them on-the-go)
+    def nextSCLoad(self) -> any:
+
+        vnfSamples = [
+            {
+                "cpu": float(random.randint(*self.cpus)), 
+            #    "memory": random.uniform(*self.memory)
+            }
+            for _ in range(self.num_vnfs)
+        ]
+        """
+        vnfSamples = [
+            (random.randint(*self.cpus), random.uniform(*self.memory))
+            for _ in range(self.num_vnfs)
+        ]
+        """
+        delays = [random.uniform(*self.vnf_delays) for _ in range(self.num_vnfs)]
+
+        while True:
+            scParameters = {}
+
+            numVNFsInSC = random.randint(*self.sc_length)
+            vnfIndices = [
+                random.randint(0, len(vnfSamples) - 1) for _ in range(numVNFsInSC)
+            ]
+
+            scParameters["vnfs"] = [vnfSamples[index] for index in vnfIndices]
+            scParameters["processing_delays"] = [delays[index] for index in vnfIndices]
+            scParameters["max_response_latency"] = random.uniform(
+                *self.max_response_latency
+            )
+            scParameters["bandwidth_demand"] = random.uniform(*self.bandwidth)
+
+            yield scParameters
 
 
 class StochasticProcess(ArrivalProcess):
-    def __init__(self, num_requests, load_generator):
-        self.num_requests = num_requests
-        self.load_generator = load_generator
+    """
+    Abstract class for a stochastic process, meant to be inherited
+    """
+    def __init__(
+            self,
+            numRequests: int,
+            loadGenerator: UniformLoadGenerator):
+        
+        self.numRequests = numRequests
+        self.loadGenerator = loadGenerator
 
         super().__init__()
 
-    def generate_requests(self):
-        load_gen = self.load_generator.next_sfc_load()
-        arrival_gen = self.next_arrival()
+    def generateRequests(self) -> List[ServiceChain]:
+        loadGen = self.loadGenerator.nextSCLoad()
+        arrivalGen = self.nextArrival()
 
         req = []
-        while len(req) < self.num_requests:
-            arrival_time, ttl = next(arrival_gen)
-            sfc_params = next(load_gen)
-            sfc = ServiceChain(arrival_time=arrival_time, ttl=ttl, vnfs=sfc_params["vnfs"]) #**sfc_params)
-            req.append(sfc)
+        while len(req) < self.numRequests:
+            arrivalTime, ttl = next(arrivalGen)
+            sc_params = next(loadGen)
+            sc = ServiceChain(arrivalTime=arrivalTime, ttl=ttl, vnfs=sc_params["vnfs"])
+            req.append(sc)
 
         return req
+    
+    @abstractmethod
+    def nextArrival(self):
+        raise NotImplementedError("Must be overwritten by an inheriting class")
 
 
 class PoissonArrivalUniformLoad(StochasticProcess):
     def __init__(
         self,
-        num_timeslots,
+        num_timeslots, #Used to find arrival rate
         num_requests,
-        service_rate,
+        service_rate, #The service rate is more or less synonymous with the TTL
         num_vnfs,
-        sfc_length,
+        sc_length,
         bandwidth,
         max_response_latency,
         cpus,
         memory,
         vnf_delays,
         seed=None,
-        **kwargs
+        **kwargs #This line needs to exist to collect parameters not accounted for but still present in the passed arguments
     ):
         if seed is not None:
             random.seed(seed)
 
-        # generate random parameters for episode
-        self.num_requests = random.randint(*num_requests)
-        self.num_timeslots = random.randint(*num_timeslots)
+        self.numRequests = random.randint(*num_requests)
+        self.numTimeslots = random.randint(*num_timeslots)
 
-        # derive parametrisation of arrival- & service-time distribution
-        self.mean_arrival_rate = self.num_requests / self.num_timeslots
-        self.mean_service_rate = random.randint(*service_rate)
+        self.meanArrivalRate = self.numRequests / self.numTimeslots
+        self.meanTTL = random.randint(*service_rate)
 
-        # generate SFC & VNF parameters uniformly at random within their bounds
-        load_generator = UniformLoadGenerator(
-            sfc_length,
+        loadGenerator = UniformLoadGenerator(
+            sc_length,
             num_vnfs,
             max_response_latency,
             bandwidth,
@@ -163,74 +212,22 @@ class PoissonArrivalUniformLoad(StochasticProcess):
             vnf_delays,
         )
 
-        super().__init__(self.num_requests, load_generator)
+        super().__init__(self.numRequests, loadGenerator)
 
-    def next_arrival(self):
-        # interarrival times conform to an exponential distribution with the rate parameter `mean_service_rate`
-        arrival_times = [
-            random.expovariate(self.mean_arrival_rate) for _ in range(self.num_requests)
+    def nextArrival(self) -> any:
+        arrivalTimes = [
+            random.expovariate(self.meanArrivalRate) for _ in range(self.numRequests)
         ]
-        arrival_times = np.ceil(np.cumsum(arrival_times))
-        arrival_times = arrival_times.astype(int)
+        arrivalTimes = np.ceil(np.cumsum(arrivalTimes))
+        arrivalTimes = arrivalTimes.astype(int)
 
-        # service times conform to an exponential distribution with the rate parameter `1 / mean_service_rate`
-        service_times = [
-            random.expovariate(1 / self.mean_service_rate)
-            for _ in range(len(arrival_times))
+        ttls = [
+            random.expovariate(1 / self.meanTTL)
+            for _ in range(len(arrivalTimes))
         ]
-        service_times = np.floor(service_times)
-        service_times = service_times.astype(int)
+        ttls = np.floor(ttls)
+        ttls = ttls.astype(int)
 
-        for arrival_time, service_time in zip(arrival_times, service_times):
-            yield arrival_time, service_time
+        for arrivalTime, ttl in zip(arrivalTimes, ttls):
+            yield arrivalTime, ttl
 
-
-class UniformLoadGenerator:
-    def __init__(
-        self,
-        sfc_length,
-        num_vnfs,
-        max_response_latency,
-        bandwidth,
-        cpus,
-        memory,
-        vnf_delays,
-    ):
-        # SFC object generation parameters
-        self.sfc_length = sfc_length
-        self.num_vnfs = num_vnfs
-        self.bandwidth = bandwidth
-        self.max_response_latency = max_response_latency
-
-        # VNF object generation parameters
-        self.cpus = cpus
-        self.memory = memory
-        self.vnf_delays = vnf_delays
-
-    def next_sfc_load(self):
-        # generate requests demands for `num_vnfs` distinct types of VNFs
-        vnf_types = [
-            (random.randint(*self.cpus), random.uniform(*self.memory))
-            for _ in range(self.num_vnfs)
-        ]
-        delays = [random.uniform(*self.vnf_delays) for _ in range(self.num_vnfs)]
-
-        # create SFC objects with uniform loads
-        while True:
-            sfc_params = {}
-
-            # randomly choose VNFs that compose the SFC
-            num_sfc_vnfs = random.randint(*self.sfc_length)
-            vnfs_idx = [
-                random.randint(0, len(vnf_types) - 1) for _ in range(num_sfc_vnfs)
-            ]
-
-            # generate all VNFs comprised in the SFC
-            sfc_params["vnfs"] = [vnf_types[idx] for idx in vnfs_idx]
-            sfc_params["processing_delays"] = [delays[idx] for idx in vnfs_idx]
-            sfc_params["max_response_latency"] = random.uniform(
-                *self.max_response_latency
-            )
-            sfc_params["bandwidth_demand"] = random.uniform(*self.bandwidth)
-
-            yield sfc_params
