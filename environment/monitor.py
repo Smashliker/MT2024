@@ -13,7 +13,10 @@ COSTS = ["cpu_cost", "memory_cost", "bandwidth_cost"]
 UTILIZATIONS = ["cpu_utilization", "memory_utilization", "bandwidth_utilization"]
 
 class StatsWrapper(gym.Wrapper):
-    def __init__(self, env: gym.Env):
+    def __init__(
+            self,
+            env: gym.Env):
+        
         super().__init__(env)
 
         self.placements = {}
@@ -27,7 +30,8 @@ class StatsWrapper(gym.Wrapper):
             self, 
             action: int
             ) -> tuple[npt.NDArray[any], float, bool, dict[str, bool]]:
-        obs, reward, done, info = super().step(action)
+        
+        obs, reward, done, info = super().step(action) #NOTE: How the step is actually called here
 
         keys = [
             key for key in info if key in STATS + COSTS + UTILIZATIONS
@@ -44,6 +48,9 @@ class StatsWrapper(gym.Wrapper):
 
 
 class EvalLogCallback(BaseCallback):
+    """
+    Callback responsible for all stats denoted as eval/ in the printout, except mean_ep_length and mean_reward
+    """
     def __init__(
             self,
             verbose: int = 0):

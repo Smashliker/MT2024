@@ -10,6 +10,7 @@ import numpy.typing as npt
 from environment.network import Network
 from environment.arrival import ArrivalProcess
 
+from environment.sc import *
 
 
 class Env(gym.Env):
@@ -28,11 +29,14 @@ class Env(gym.Env):
         # action "num_nodes" refers to volutarily rejecting the VNF embedding
         self.action_space = spaces.Discrete(numNodes + 1)
 
-        observationDimension = numNodes * resourcesPerNode + resourcesPerNode + 3 #TODO find out why these values make sense. They should in theory...
+        observationDimension = numNodes * resourcesPerNode + resourcesPerNode + 2 #NOTE: This may change later
         self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(observationDimension,), dtype=np.float16)
 
         self.reward = 0
         self.vnfIndex = 0
+
+        #Initialize some initial values so that the check_env may run in main.py, this will be overriden at runtime by .reset() shortly
+        self.reset()
 
     def step(
             self,
@@ -90,7 +94,7 @@ class Env(gym.Env):
         return self.compute_state(episodeDone=self.episodeDone), self.reward, self.episodeDone, info
 
     def reset(self) -> npt.NDArray[any]:
-        self.episodeDone = False
+        self.episodeDone = False #NOTE: This use of the term "episode" is a bit iffy, but it should match with documentation, e.g: https://stable-baselines3.readthedocs.io/en/master/common/evaluation.html
 
         self.arrivalProcess = ArrivalProcess.factory(self.arrivalConfig)
 
@@ -109,10 +113,10 @@ class Env(gym.Env):
         try:
             while self.sc == None:
                 self.network.update()
-                batch = next(self.arrivalProcess)
+                nextSC = next(self.arrivalProcess)
 
-                if len(batch) > 0:
-                    self.sc = deepcopy(batch[0])
+                if nextSC != None:
+                    self.sc = deepcopy(nextSC)
 
                     logging.debug("Time progressed, new SC arrived.")
 
@@ -147,7 +151,8 @@ class Env(gym.Env):
 
         vnf = self.sc.vnfs[self.vnfIndex]
 
-        normVNFResources = np.asarray([*vnf]) #TODO: May add SC requirements here, or as its own variable
+        normVNFResources = np.asarray(*vnf.values()) #TODO: May add SC requirements here, or as its own variable
+
         normVNFResources = list(normVNFResources / maxResources)
 
         normUndeployedVNFs = (len(self.sc.vnfs) - (self.vnfIndex + 1)) / 7 #NOTE: Hardcoded division by 7, the assumed maximum amount of VNFs in a single SC
@@ -156,7 +161,9 @@ class Env(gym.Env):
         observation = np.concatenate(
             (
                 networkResources,
+
                 normVNFResources,
+                
                 normUndeployedVNFs,
                 normTTL,
             ),
