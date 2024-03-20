@@ -9,6 +9,8 @@ from environment.env import Env
 from environment.arrival import *
 from environment.monitor import EvalLogCallback, StatsWrapper
 
+from gym.utils.env_checker import check_env
+
 DEFAULTTOTALTIMESTEPS = 1000000
 DEFAULTNETWORKPATH = "data/network.gpickle"
 DEFAULTAGENTTYPE = "PPO"
@@ -17,6 +19,7 @@ DEFAULTEVALFREQ = 10000
 DEFAULTOUTPUT = "output"
 DEFAULTDEBUGGING = False
 DEFAULTARRIVALCONFIG = "data/requests.json"
+DEFAULTSEED = None
 
 def main(
         totalTimesteps: int = DEFAULTTOTALTIMESTEPS,
@@ -26,7 +29,8 @@ def main(
         evalFreq: int = DEFAULTEVALFREQ,
         output: str = DEFAULTOUTPUT,
         debug: bool = DEFAULTDEBUGGING,
-        arrivalConfig: str = DEFAULTARRIVALCONFIG
+        arrivalConfig: str = DEFAULTARRIVALCONFIG,
+        seed: int = DEFAULTSEED
 ) -> None:
     
     logging.basicConfig()
@@ -34,20 +38,21 @@ def main(
     logging.getLogger().setLevel(debug_level)
 
     Path(f"{output}/logs").mkdir(exist_ok=True, parents=True)
-    #Path(f"{output}/evaluation").mkdir(exist_ok=True, parents=True)
 
     with open(Path(arrivalConfig), "r") as file:
         arrival_config = json.load(file)
 
+    arrival_config["seed"] = seed
+
     env = Env(networkPath, arrival_config)
+    check_env(env)
 
     evalEnv = StatsWrapper(Env(networkPath, arrival_config))
     evalLogCallback = EvalLogCallback()
     evalCallback = EvalCallback(
         evalEnv,
-        n_eval_episodes=nEvalEpisodes,
-        log_path=f"{output}/evaluation",
-        eval_freq=evalFreq,
+        n_eval_episodes=nEvalEpisodes, #TODO: Figure this out
+        eval_freq=evalFreq, #Evaluation is done each evalFreq timesteps
         deterministic=False,
         render=False,
         callback_after_eval=evalLogCallback,
@@ -56,10 +61,12 @@ def main(
     Agent = getattr(stable_baselines3, agentType)
     agent = Agent(
         **{
-            "policy": "MlpPolicy", #This policy is best suited for the contionous state in this task
+            "policy": "MlpPolicy", #This policy is best suited for the continous state in this task
             "env": env,
             "verbose": 1,
             "tensorboard_log": f"{output}/logs",
+            "learning_rate": 0.005, #This value originates from AG
+            "clip_range": 0.2 #Default value
         }
     )
 
@@ -81,6 +88,7 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default=DEFAULTOUTPUT)
     parser.add_argument("--debug", type=bool, default=DEFAULTDEBUGGING)
     parser.add_argument("--arrivalConfig", type=str, default=DEFAULTARRIVALCONFIG)
+    parser.add_argument("--seed", type=int, default=None)
 
     args = parser.parse_args()
 
@@ -92,5 +100,6 @@ if __name__ == "__main__":
         args.evalFreq,
         args.output,
         args.debug,
-        args.arrivalConfig
+        args.arrivalConfig,
+        args.seed
     )
