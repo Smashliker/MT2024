@@ -3,11 +3,11 @@ from typing import List
 class ServiceChain:
     def __init__(
         self,
-        arrival_time: float,
+        arrivalTime: float,
         ttl: float,
-        vnfs: List[List[float]] #Should eventually be dict to get access to keys in network.py
+        vnfs: List[dict[str, float]] #Should eventually be dict to get access to keys in network.py
     ):
-        self.arrival_time = arrival_time
+        self.arrivalTime = arrivalTime
         self.ttl = ttl
         self.vnfs = vnfs
         #E2E

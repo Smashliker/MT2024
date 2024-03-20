@@ -31,7 +31,7 @@ class Network:
             sc: ServiceChain
             ) -> bool:
 
-            return sc.arrival_time + sc.ttl >= self.timestep
+            return sc.arrivalTime + sc.ttl >= self.timestep
 
     def update(
             self,
@@ -49,7 +49,7 @@ class Network:
     def allocateVNF(
             self,
             sc: ServiceChain,
-            vnf: List[float],
+            vnf: dict[str, float],
             node: int
             ) -> bool:
         
@@ -76,7 +76,9 @@ class Network:
         if remaining:
             for sc, nodes in self.scAllocation.items():
                 for vnfIndex, nodeIndex in enumerate(nodes):
-                    resources[nodeIndex]["cpu"] -= sc.vnfs[vnfIndex][0] #NOTE: Lack of generalization
+                    for resourceKey, resourceValue in sc.vnfs[vnfIndex].items():
+                        #Generalized calculation enabled by the dictionarization of the vnf
+                        resources[nodeIndex][resourceKey] -= resourceValue
 
         return resources
     
@@ -102,7 +104,7 @@ class Network:
 
     def checkIfAnyNodeCanAllocateVNF(
             self, 
-            vnf: List[float], 
+            vnf: dict[str, float], 
             node=None
             ) -> bool:
         
@@ -192,7 +194,12 @@ class Network:
 
 def VNFConstraints(
         res: dict[str, float], 
-        vnf: List[float]
+        vnf: dict[str, float]
         ) -> bool:
     
-    return res["cpu"] >= vnf[0]
+    resourceSufficient = True
+
+    for resourceKey, resourceValue in vnf.items():
+        resourceSufficient = resourceSufficient and (res[resourceKey] >= resourceValue)
+
+    return resourceSufficient
