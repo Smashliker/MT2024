@@ -84,12 +84,16 @@ class Env(gym.Env):
         logging.debug(f"Environment will attribute reward: {self.reward}")
                     
 
+        #Updates needed for monitor.py
         resourceUtilization = self.vnfBacktrack.calculateUtilization()
         resourceCost = self.vnfBacktrack.calculateCosts()
         info.update(
             {res + "_utilization": val for res, val in resourceUtilization.items()}
         )
         info.update({res + "_cost": val for res, val in resourceCost.items()})
+
+        numOperating = len(self.vnfBacktrack.getOperatingServers())
+        info.update({"operating_servers": numOperating})
 
         return self.compute_state(episodeDone=self.episodeDone), self.reward, self.episodeDone, info
 
@@ -163,7 +167,7 @@ class Env(gym.Env):
                 networkResources,
 
                 normVNFResources,
-                
+
                 normUndeployedVNFs,
                 normTTL,
             ),

@@ -8,6 +8,8 @@ import numpy.typing as npt
 
 from stable_baselines3.common.callbacks import BaseCallback
 
+from collections import defaultdict
+
 STATS = ["accepted", "rejected", "operating_servers"]
 COSTS = ["cpu_cost", "memory_cost", "bandwidth_cost"]
 UTILIZATIONS = ["cpu_utilization", "memory_utilization", "bandwidth_utilization"]
@@ -92,9 +94,13 @@ class EvalLogCallback(BaseCallback):
         occupied = [
             {key: env.statistics[key] for key in UTILIZATIONS} for env in eval_envs
         ]
-        occupied = {key: np.mean([dic[key] for dic in occupied]) for key in occupied[0]}
 
-        for key, value in occupied.items():
+        avgOccupied = defaultdict(lambda: 0)
+        for envIndex, env in enumerate(eval_envs):
+            for resourceKey in occupied[0]:
+                avgOccupied[resourceKey] += occupied[envIndex][resourceKey] / (env.statistics["ep_length"] * len(eval_envs))
+
+        for key, value in avgOccupied.items():
             self.logger.record("eval/mean_{}".format(key), value)
 
         operating = np.mean(
