@@ -41,10 +41,6 @@ class ArrivalProcess(Generator):
 
     @staticmethod
     def factory(config: str) -> Generator: #any class inheriting Generator (ArrivalProcess)
-        #Used primarily for digesting requests.json
-        if "type" not in config:
-            arrival = JSONArrivalProcess(config)
-
         arrivalType = config["type"]
 
         params = {key: value for key, value in config.items() if key != "type"}
@@ -60,33 +56,6 @@ class ArrivalProcess(Generator):
     @abstractmethod
     def generateRequests(self):
         raise NotImplementedError("Must be overwritten by an inheriting class")
-
-
-class JSONArrivalProcess(ArrivalProcess):
-    def __init__(
-            self,
-            request_path: str = '/data/requests.json'):
-        
-        assert request_path.endswith(".json")
-        self.request_path = request_path
-        super().__init__()
-
-    def generateRequests(self) -> List[ServiceChain]:
-        with open(self.request_path, "rb") as file:
-            requests = json.load(file)
-
-        req = []
-        for sc in requests:
-            vnfs = sc.pop("vnfs")
-            sc = ServiceChain(vnfs=vnfs, **sc)
-
-            req.append(sc)
-
-        return req
-    
-    #TODO
-    def parseVNFs(self, vnfs):
-            return [tuple(vnf.values()) for vnf in vnfs]
 
 class UniformLoadGenerator:
     def __init__(
@@ -167,7 +136,7 @@ class StochasticProcess(ArrivalProcess):
         while len(req) < self.numRequests:
             arrivalTime, ttl = next(arrivalGen)
             sc_params = next(loadGen)
-            sc = ServiceChain(arrivalTime=arrivalTime, ttl=ttl, vnfs=sc_params["vnfs"])
+            sc = ServiceChain(arrivalTime=arrivalTime, ttl=ttl, vnfs=sc_params["vnfs"], max_response_latency=sc_params["max_response_latency"])
             req.append(sc)
 
         return req

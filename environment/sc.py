@@ -5,10 +5,11 @@ class ServiceChain:
         self,
         arrivalTime: float,
         ttl: float,
-        vnfs: List[dict[str, float]] #Should eventually be dict to get access to keys in network.py
+        vnfs: List[dict[str, float]],
+        max_response_latency: float
     ):
         self.arrivalTime = arrivalTime
         self.ttl = ttl
         self.vnfs = vnfs
-        #E2E
+        self.maxCumulativeLatency = max_response_latency
         self.num_vnfs = len(self.vnfs)
