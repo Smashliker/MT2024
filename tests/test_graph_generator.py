@@ -21,7 +21,8 @@ class Tests(unittest.TestCase):
         txtFile = f"{baseString}.txt"
         pickleFile = f"{baseString}.gpickle"
 
-        generate_graph(baseString)
+        graph = generateToyGraph()
+        saveGraph(graph, baseString)
 
         try:
             assert os.path.isfile(txtFile)
