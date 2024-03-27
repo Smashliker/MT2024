@@ -49,7 +49,9 @@ class Env(gym.Env):
 
         vnf = self.sc.vnfs[self.vnfIndex]
 
-        isValidSC = self.vnfBacktrack.allocateVNF(self.sc, vnf, action) and self.vnfBacktrack.canAllocate(self.sc, self.vnfIndex + 1)
+        isValidSC = self.vnfBacktrack.allocateVNF(self.sc, vnf, action)
+        #Must calculate these separately so that we see the if the last VNF violates SC requirements
+        isValidSC = isValidSC and self.vnfBacktrack.canAllocate(self.sc, self.vnfIndex + 1)
         
         logging.debug(
                 "This SC allocation is: {}.".format(
@@ -159,7 +161,7 @@ class Env(gym.Env):
 
         normVNFResources = list(normVNFResources / maxResources)
 
-        normUndeployedVNFs = (len(self.sc.vnfs) - (self.vnfIndex + 1)) / 7 #NOTE: Hardcoded division by 7, the assumed maximum amount of VNFs in a single SC
+        normUndeployedVNFs = (len(self.sc.vnfs) - (self.vnfIndex + 1)) / 6 #NOTE: Hardcoded division by 6, the assumed maximum amount of VNFs in a single SC
         normTTL = self.sc.ttl / 1000 #NOTE: Hardcoded division by 1000, the assumed maximum TTL
 
         observation = np.concatenate(

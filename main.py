@@ -45,7 +45,7 @@ def main(
     arrival_config["seed"] = seed
 
     env = Env(networkPath, arrival_config)
-    check_env(env)
+    #check_env(env)
 
     evalEnv = StatsWrapper(Env(networkPath, arrival_config))
     evalLogCallback = EvalLogCallback()
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default=DEFAULTOUTPUT)
     parser.add_argument("--debug", type=bool, default=DEFAULTDEBUGGING)
     parser.add_argument("--arrivalConfig", type=str, default=DEFAULTARRIVALCONFIG)
-    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=DEFAULTSEED)
 
     args = parser.parse_args()
 

@@ -16,7 +16,7 @@ class Network:
     def __init__(
             self,
             networkPath: str,
-            costs: dict[str, float] = {"cpu": 0.2, "memory": 0.2, "bandwidth": 0.0006}):
+            costs: dict[str, float] = {"cpu": 0.2, "memory": 0.2, "bandwidth": 0.0006, "latency": 0.2}):
 
         self.overlay, properties = Network.checkOverlay(networkPath)
         self.numNodes = properties["num_nodes"]
@@ -35,7 +35,7 @@ class Network:
 
     def update(
             self,
-            timeIncrement: int =1
+            timeIncrement: int = 1
             ) -> None:
 
         self.timestep += timeIncrement
@@ -82,6 +82,68 @@ class Network:
 
         return resources
     
+    def checkSCConstraints(
+            self, 
+            sc: ServiceChain
+            ) -> bool:
+        
+        #TODO: Add bandwidth logic?
+
+        if sc not in self.scAllocation:
+            return True
+
+        try:
+            #TODO: Evaluate if this never checks the last allocated VNF
+            latency = self.calculateCurrentSCLatency(sc)
+            #print(f"{latency} vs {sc.maxCumulativeLatency}")
+            latencyConstraint = latency <= sc.maxCumulativeLatency
+        except NetworkXNoPath:
+            latencyConstraint = False
+
+        return latencyConstraint
+
+    #NOTE: May be unneeded
+    def calculateCurrentSCBW(
+            self, 
+            sc: ServiceChain
+            ) -> float:
+        
+        bw = 0
+
+        if sc in self.scAllocation:
+            nodes = self.scAllocation[sc]
+
+            bwList = []
+            for nodeIndex in range(1, len(nodes)):
+                bw = nx.dijkstra_path_length(self.overlay, nodes[nodeIndex-1], nodes[nodeIndex], weight="bandwidth")
+
+                bwList.append(bw)
+
+            bw = sum(bwList)
+
+        return bw
+
+    def calculateCurrentSCLatency(
+            self, 
+            sc: ServiceChain
+            ) -> float:
+        
+        latency = 0
+
+        if sc in self.scAllocation:
+            nodes = self.scAllocation[sc]
+
+            latencyList = [list(self.overlay.nodes(data=True))[nodes[0]][1]["latency"]]
+            for nodeIndex in range(1, len(nodes)):
+                latencyList.append(nx.dijkstra_path_length(self.overlay, nodes[nodeIndex-1], nodes[nodeIndex], weight="latency"))
+
+                #Add the latency each node requires
+                latencyList.append(list(self.overlay.nodes(data=True))[nodes[nodeIndex]][1]["latency"])
+
+            latency = sum(latencyList)
+
+        return latency
+    
     def canAllocate(
             self, 
             sc: ServiceChain, 
@@ -90,17 +152,17 @@ class Network:
         
         vnfs = sc.vnfs[vnfOffset:]
 
-        #TODO: This current implementation does not take chaining into account apparently, allocations may happen anywhere
+        #NOTE: Chaining does not explicitly happen here, as it is implied in "calculateCurrentSCLatency"
 
-        VNFisOK = True #NOTE: This value defaults to true since it assumes that this is the last VNF until proven otherwise
+        nextVNFisOK = True #NOTE: This value defaults to true since it assumes that this is the last VNF until proven otherwise
+        #NOTE: This checks specifically if the next VNF (if it exists) can be allocated
         if len(vnfs) > 0:
             nextVNF = next(iter(vnfs))
-            VNFisOK = self.checkIfAnyNodeCanAllocateVNF(nextVNF)
+            nextVNFisOK = self.checkIfAnyNodeCanAllocateVNF(nextVNF)
 
-        #TODO: May add logic for SC values here
-        SCisOK = True
+        SCisOK = self.checkSCConstraints(sc)
 
-        return VNFisOK and SCisOK
+        return nextVNFisOK and SCisOK
 
     def checkIfAnyNodeCanAllocateVNF(
             self, 
