@@ -65,7 +65,7 @@ class UniformLoadGenerator:
         max_response_latency,
         bandwidth,
         cpus,
-        memory,
+        storage,
         vnf_delays,
     ):
         self.sc_length = sc_length
@@ -74,7 +74,7 @@ class UniformLoadGenerator:
         self.max_response_latency = max_response_latency
 
         self.cpus = cpus
-        self.memory = memory
+        self.storage = storage
         self.vnf_delays = vnf_delays
 
     #NOTE: Here the difference between sc_length and num_vnfs is relevant: num_vnfs is to create some pre-defined VNFs which the new SC picks from, while sc_length is the actual length of the SC
@@ -84,7 +84,7 @@ class UniformLoadGenerator:
         vnfSamples = [
             {
                 "cpu": float(random.randint(*self.cpus)), 
-            #    "memory": random.uniform(*self.memory)
+                "storage": random.uniform(*self.storage)
             }
             for _ in range(self.num_vnfs)
         ]
@@ -105,11 +105,13 @@ class UniformLoadGenerator:
             ]
 
             scParameters["vnfs"] = [vnfSamples[index] for index in vnfIndices]
-            scParameters["processing_delays"] = [delays[index] for index in vnfIndices]
+            #scParameters["processing_delays"] = [delays[index] for index in vnfIndices]
             scParameters["max_response_latency"] = random.uniform(
                 *self.max_response_latency
             )
-            scParameters["bandwidth_demand"] = random.uniform(*self.bandwidth)
+            #scParameters["bandwidth_demand"] = random.uniform(*self.bandwidth)
+
+            scParameters["virtualLinkRequirements"] = [random.uniform(*self.bandwidth) for _ in range(numVNFsInSC)]
 
             yield scParameters
 
@@ -136,7 +138,14 @@ class StochasticProcess(ArrivalProcess):
         while len(req) < self.numRequests:
             arrivalTime, ttl = next(arrivalGen)
             sc_params = next(loadGen)
-            sc = ServiceChain(arrivalTime=arrivalTime, ttl=ttl, vnfs=sc_params["vnfs"], max_response_latency=sc_params["max_response_latency"])
+            sc = ServiceChain(
+                arrivalTime=arrivalTime,
+                ttl=ttl,
+                vnfs=sc_params["vnfs"],
+                max_response_latency=sc_params["max_response_latency"],
+                virtualLinkRequirements=sc_params["virtualLinkRequirements"]
+                )
+            
             req.append(sc)
 
         return req
@@ -157,7 +166,7 @@ class PoissonArrivalUniformLoad(StochasticProcess):
         bandwidth,
         max_response_latency,
         cpus,
-        memory,
+        storage,
         vnf_delays,
         seed=None,
         **kwargs #This line needs to exist to collect parameters not accounted for but still present in the passed arguments
@@ -177,7 +186,7 @@ class PoissonArrivalUniformLoad(StochasticProcess):
             max_response_latency,
             bandwidth,
             cpus,
-            memory,
+            storage,
             vnf_delays,
         )
 
@@ -185,13 +194,13 @@ class PoissonArrivalUniformLoad(StochasticProcess):
 
     def nextArrival(self) -> any:
         arrivalTimes = [
-            random.expovariate(self.meanArrivalRate) for _ in range(self.numRequests)
+            random.expovariate(self.meanArrivalRate) for _ in range(self.numRequests) #NOTE: lambda=meanArrivalRate since these are the times between poisson arrivals, lambda = E[X], X ~ poisson(lambda)
         ]
         arrivalTimes = np.ceil(np.cumsum(arrivalTimes))
         arrivalTimes = arrivalTimes.astype(int)
 
         ttls = [
-            random.expovariate(1 / self.meanTTL)
+            random.expovariate(1 / self.meanTTL) #NOTE: We give it lambda = 1 / meanTTL = 1 / expectedTTL, as meanTTL is the actual E[X], X ~ exp(lambda)
             for _ in range(len(arrivalTimes))
         ]
         ttls = np.floor(ttls)
