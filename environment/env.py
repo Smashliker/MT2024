@@ -12,6 +12,8 @@ from environment.arrival import ArrivalProcess
 
 from environment.sc import *
 
+from graph_generator import mapNodeToDomain
+
 
 class Env(gym.Env):
     def __init__(
@@ -29,7 +31,7 @@ class Env(gym.Env):
         # action "num_nodes" refers to volutarily rejecting the VNF embedding
         self.action_space = spaces.Discrete(numNodes + 1)
 
-        observationDimension = numNodes * resourcesPerNode + resourcesPerNode + 2 #NOTE: This may change later
+        observationDimension = numNodes * resourcesPerNode + resourcesPerNode + 3 #NOTE: This may change later
         self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(observationDimension,), dtype=np.float16)
 
         self.reward = 0
@@ -48,8 +50,9 @@ class Env(gym.Env):
         logging.debug(f"Agent wants to allocate VNF {self.vnfIndex} on Node: {action}")
 
         vnf = self.sc.vnfs[self.vnfIndex]
+        virtualLinkRequirement = self.sc.virtualLinkRequirements[self.vnfIndex]
 
-        isValidSC = self.vnfBacktrack.allocateVNF(self.sc, vnf, action)
+        isValidSC = self.vnfBacktrack.allocateVNF(self.sc, vnf, virtualLinkRequirement, action)
         #Must calculate these separately so that we see the if the last VNF violates SC requirements
         isValidSC = isValidSC and self.vnfBacktrack.canAllocate(self.sc, self.vnfIndex + 1)
         
@@ -117,12 +120,13 @@ class Env(gym.Env):
         self.sc = None #NOTE: It is assumed here that this function is only called when the service chain is finished (rejected or accepted)
 
         try:
+            #TODO: Maybe remove this while loop, it may be redundant
             while self.sc == None:
-                self.network.update()
                 nextSC = next(self.arrivalProcess)
 
                 if nextSC != None:
                     self.sc = deepcopy(nextSC)
+                    self.network.update(self.sc.arrivalTime) #This is probably a more correct network update method
 
                     logging.debug("Time progressed, new SC arrived.")
 
@@ -157,12 +161,16 @@ class Env(gym.Env):
 
         vnf = self.sc.vnfs[self.vnfIndex]
 
-        normVNFResources = np.asarray(*vnf.values()) #TODO: May add SC requirements here, or as its own variable
+        normVNFResources = np.asarray(list(vnf.values())) #TODO: May add SC requirements here, or as its own variable
 
         normVNFResources = list(normVNFResources / maxResources)
 
         normUndeployedVNFs = (len(self.sc.vnfs) - (self.vnfIndex + 1)) / 6 #NOTE: Hardcoded division by 6, the assumed maximum amount of VNFs in a single SC
         normTTL = self.sc.ttl / 1000 #NOTE: Hardcoded division by 1000, the assumed maximum TTL
+
+        domain = -1 #-1 maps to N/A, 0 to space, 1 to air and 2 to ground
+        if self.sc in self.vnfBacktrack.scAllocation:
+            domain = mapNodeToDomain(self.vnfBacktrack.scAllocation[self.sc][-1])
 
         observation = np.concatenate(
             (
@@ -172,6 +180,7 @@ class Env(gym.Env):
 
                 normUndeployedVNFs,
                 normTTL,
+                domain
             ),
             axis=None,
         )
@@ -187,6 +196,6 @@ class Env(gym.Env):
         reward = 0
 
         if isLastVNF and isValidSC:
-            reward = 1
+            reward = self.network.calculateARC()
 
         return reward
