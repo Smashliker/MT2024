@@ -21,7 +21,7 @@ class Tests(unittest.TestCase):
         txtFile = f"{baseString}.txt"
         pickleFile = f"{baseString}.gpickle"
 
-        graph = generateToyGraph()
+        graph = generateToyGraph()[0]
         saveGraph(graph, baseString)
 
         try:
@@ -30,7 +30,7 @@ class Tests(unittest.TestCase):
 
             #Test that the .txt file is formatted as expected
             with open(txtFile, 'r') as f:
-                assert len(f.readlines()) == 5
+                assert len(f.readlines()) == 8
 
         #Clean up
         finally:
