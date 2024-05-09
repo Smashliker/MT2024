@@ -78,13 +78,14 @@ class UniformLoadGenerator:
         self.vnf_delays = vnf_delays
 
     #NOTE: Here the difference between sc_length and num_vnfs is relevant: num_vnfs is to create some pre-defined VNFs which the new SC picks from, while sc_length is the actual length of the SC
-    #TODO: Find out if this uniform generation is useful (creating samples instead of just creating all of them on-the-go)
     def nextSCLoad(self) -> any:
 
         vnfSamples = [
             {
                 "cpu": float(random.randint(*self.cpus)), 
-                "storage": random.uniform(*self.storage)
+                "storage": random.uniform(*self.storage),
+                "candidate_domain": random.choice([0] * 1 + [1] * 3 + [2] * 6), #https://stackoverflow.com/a/14992686
+                "bandwidth": random.uniform(*self.bandwidth)
             }
             for _ in range(self.num_vnfs)
         ]
@@ -94,7 +95,7 @@ class UniformLoadGenerator:
             for _ in range(self.num_vnfs)
         ]
         """
-        delays = [random.uniform(*self.vnf_delays) for _ in range(self.num_vnfs)]
+        #delays = [random.uniform(*self.vnf_delays) for _ in range(self.num_vnfs)]
 
         while True:
             scParameters = {}

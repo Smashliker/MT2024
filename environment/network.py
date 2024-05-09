@@ -13,7 +13,10 @@ import pickle
 
 import math
 
-RESTRAINTS = ["latency"]
+from graph_generator import mapNodeToDomain
+
+NODERESTRAINTS = ["latency", "domain"]
+VNFRESTRAINTS = ["candidate_domain"]
 
 class Network:
     def __init__(
@@ -28,6 +31,12 @@ class Network:
         self.costs = costs
 
         self.scAllocation: dict[ServiceChain, List[int]] = dict()
+        #self.permSCAllocation: dict[ServiceChain, List[int]] = dict()
+
+        self.revenue = 0
+        self.cost = 0
+
+        self.currentDomain = -1
 
     def checkTTL(
             self,
@@ -59,17 +68,20 @@ class Network:
             ) -> bool:
         
         #Node requirements
-        if node >= self.numNodes or not self.checkIfAnyNodeCanAllocateVNF(vnf, node):
+        if node >= self.numNodes or not self.checkIfNodeCanAllocateVNF(vnf, node):
             return False
         
         #Link requirements
-        if virtualLinkRequirement > self.calculateMinLinkBW(sc, node):
-            return False
+        #if virtualLinkRequirement > self.calculateMinLinkBW(sc, node):
+            #return False
 
         if sc not in self.scAllocation:
             self.scAllocation[sc] = []
+        #if sc not in self.permSCAllocation:
+            #self.permSCAllocation[sc] = []
 
         self.scAllocation[sc].append(node)
+        #self.permSCAllocation[sc].append(node)
 
         return True
 
@@ -86,13 +98,14 @@ class Network:
         ]
         """
 
+        #NOTE: This iteration ensures that resources is ordered from node 0 -> 99
         for _, nodes in self.overlay.nodes(data=True):
             nodeDict = dict()
 
             for resourceType, maxVal in nodes.items():
 
                 #Remove restraints from resources
-                if resourceType not in RESTRAINTS:
+                if resourceType not in NODERESTRAINTS or resourceType == "domain":
                     nodeDict[resourceType] =  maxVal
 
             resources.append(nodeDict)
@@ -101,8 +114,19 @@ class Network:
             for sc, nodes in self.scAllocation.items():
                 for vnfIndex, nodeIndex in enumerate(nodes):
                     for resourceKey, resourceValue in sc.vnfs[vnfIndex].items():
-                        #Generalized calculation enabled by the dictionarization of the vnf
-                        resources[nodeIndex][resourceKey] -= resourceValue
+
+                        if resourceKey not in VNFRESTRAINTS:
+                            #Generalized calculation enabled by the dictionarization of the vnf
+                            resources[nodeIndex][resourceKey] -= resourceValue
+
+        #Special case if we only want a subset of the network
+        if self.currentDomain > -1 and False:
+            for nodeIndex, resource in enumerate(resources):
+                if mapNodeToDomain(nodeIndex) != self.currentDomain:
+                    for resourceType, _ in resource.items():
+                        if resourceType not in NODERESTRAINTS:
+                            resource[resourceType] = 0
+
 
         return resources
     
@@ -110,14 +134,11 @@ class Network:
             self, 
             sc: ServiceChain
             ) -> bool:
-        
-        #TODO: Add cumulative bandwidth logic?
 
         if sc not in self.scAllocation:
             return True
 
         try:
-            #TODO 7: Evaluate if this never checks the last allocated VNF, it seems to always lag behind a step
             latency = self.calculateCurrentSCLatency(sc)
             latencyConstraint = latency <= sc.maxCumulativeLatency
         except NetworkXNoPath:
@@ -126,50 +147,46 @@ class Network:
         return latencyConstraint
 
     #NOTE: This needs to be called on self.network in the environment, as that one has a self.scAllocation that is up to date
-    def calculateARC(
-            self
+    def calculateRevenueCost(
+            self,
+            sc: ServiceChain
+            ) -> None:
 
-    ) -> float:
-        revenue = defaultdict(lambda: 0)
-        cost = defaultdict(lambda: 0)
+        allocations = self.scAllocation[sc]
 
-        returnARC = 0
+        #It is assumed every SC must have at least one VNF
+        for vnfKey, value in sc.vnfs[0].items():
+            if vnfKey not in VNFRESTRAINTS:
+                self.revenue += value
+                self.cost += value
 
-        for sc, allocations in self.scAllocation.items():
+        #For each additional VNF in SC
+        for allocationIndex in range(1, len(allocations)):
 
-            revenue[sc] += sum(sc.vnfs[0].values())
-            cost[sc] += sum(sc.vnfs[0].values())
+            for vnfKey, value in sc.vnfs[allocationIndex].items():
+                if vnfKey not in VNFRESTRAINTS:
+                    self.revenue += value
+                    self.cost += value
+            
+            allocationTuple = (allocations[allocationIndex - 1], allocations[allocationIndex])
+            #We do not spend any BW if allocated to same node
+            if allocationTuple[0] != allocationTuple[1]:
+                self.revenue += sc.virtualLinkRequirements[allocationIndex]
 
-            assert len(allocations) == len(sc.vnfs) 
-            for allocationIndex in range(1, len(allocations)):
-                revenue[sc] += sum(sc.vnfs[allocationIndex].values())
-                cost[sc] += sum(sc.vnfs[allocationIndex].values())
-                
-                allocationTuple = (allocations[allocationIndex - 1], allocations[allocationIndex])
+                hops = len(nx.dijkstra_path(self.overlay, allocationTuple[0], allocationTuple[1], weight="latency")) - 1
+                self.cost += sc.virtualLinkRequirements[allocationIndex] * hops
 
-                if allocationTuple[0] != allocationTuple[1]:
-                    revenue[sc] += sc.virtualLinkRequirements[allocationIndex]
 
-                    cost[sc] += sc.virtualLinkRequirements[allocationIndex] * nx.dijkstra_path_length(self.overlay, allocationTuple[0], allocationTuple[1])
-
-        sumRevenue = sum(revenue.values())
-        sumCost = sum(cost.values())
-
-        if sumCost != 0:
-            returnARC = sumRevenue / sumCost
-
-        return returnARC
-
+    """
     #NOTE: Definition of link splitting from paper "Distributed DRL" by Chao Wang largely fits with the idea behind this method
-    #TODO: Make the algorithm consume BW, take inspiration from the resource calculation in 
     def calculateMinLinkBW(
             self, 
             sc: ServiceChain,
             destinationNode: int
             ) -> float:
-        """
-        Calculates the minimum available BW between the last allocated node (found in sc) and the desinationNode.
-        """
+        
+        #Calculates the minimum available BW between the last allocated node (found in sc) and the desinationNode.
+        
         
         bw = 0
 
@@ -177,7 +194,7 @@ class Network:
             originNode = self.scAllocation[sc][-1]
 
             try:
-                pathNodes = nx.dijkstra_path(self.overlay, originNode, destinationNode, weight="latency") #TODO: Calculating SP with latency as weight is a simplification ensuring that the SP is the same wherever it is calculated, but this should maybe change
+                pathNodes = nx.dijkstra_path(self.overlay, originNode, destinationNode, weight="latency")
             except nx.exception.NetworkXNoPath:
                 return -1
 
@@ -194,18 +211,16 @@ class Network:
             bw = min(bwList)
 
         return bw
+    """
 
     def calculateCurrentSCLatency(
             self, 
             sc: ServiceChain
             ) -> float:
-        
         latency = 0
 
         if sc in self.scAllocation:
             nodes = self.scAllocation[sc]
-
-            #nodes.append(node: int) #TODO 7: May do something like this to avoid this function lagging behind?
 
             #Add the initial node latency
             latencyList = [list(self.overlay.nodes(data=True))[nodes[0]][1]["latency"]]
@@ -221,6 +236,7 @@ class Network:
 
         return latency
     
+    """
     def canAllocate(
             self, 
             sc: ServiceChain, 
@@ -235,16 +251,17 @@ class Network:
         #NOTE: This checks specifically if the next VNF (if it exists) can be allocated
         if len(vnfs) > 0:
             nextVNF = next(iter(vnfs))
-            nextVNFisOK = self.checkIfAnyNodeCanAllocateVNF(nextVNF)
+            nextVNFisOK = self.checkIfNodeCanAllocateVNF(nextVNF)
 
         SCisOK = self.checkSCConstraints(sc)
 
         return nextVNFisOK and SCisOK
+    """
 
-    def checkIfAnyNodeCanAllocateVNF(
+    def checkIfNodeCanAllocateVNF(
             self, 
             vnf: dict[str, float], 
-            node=None
+            node=None #A None node means you check all the nodes
             ) -> bool:
         
         resources = self.calculateAllNodeResources()
@@ -253,10 +270,9 @@ class Network:
 
         nodes = set(num for num, res in enumerate(resources) if VNFConstraints(res, vnf))
 
-        assert bool(nodes) == (len(nodes) > 0) #TODO: Remove this line once sufficiently convinced these are equivalent
         return len(nodes) > 0
 
-
+    """
     def calculateUtilization(self) -> dict[str, float]:
         max_resources = self.calculateAllNodeResources(remaining=False)
         avail_resources = self.calculateAllNodeResources(remaining=True)
@@ -274,6 +290,7 @@ class Network:
         }
 
         return utilization
+    """
 
     def getOperatingServers(self) -> set[int]:
         operatingServers = {
@@ -281,6 +298,7 @@ class Network:
         }
         return operatingServers
 
+    """
     def calculateCosts(self) -> dict[str, float]:
         operatingServers = self.getOperatingServers()
 
@@ -294,19 +312,19 @@ class Network:
             if idx in operatingServers
         ]
 
-        #TODO: Figure this one out, very unfamiliar set operations
         resources = dict(functools.reduce(operator.add, map(Counter, resources)))
 
         cost = {res: resources[res] * self.costs[res] for res in resources}
 
         return cost
+    """
 
     @staticmethod
     def checkOverlay(overlay: str) -> tuple[nx.Graph, dict[str, float]]:
         with open(overlay, 'rb') as f:
             overlay = pickle.load(f)
 
-        nodeAttributes = {"cpu": float, "storage": float}
+        nodeAttributes = {"cpu": float, "storage": float, "bandwidth": float, "latency": float}
         for _, data in overlay.nodes(data=True):
             assert all(
                 [nattr in data for nattr, _ in nodeAttributes.items()]
@@ -331,7 +349,7 @@ class Network:
 
         #Remove restraints from resources
         for key, _ in resource.items():
-            if key in RESTRAINTS:
+            if key in NODERESTRAINTS:
                 properties["num_node_resources"] -= 1
 
         return overlay, properties
@@ -346,6 +364,9 @@ def VNFConstraints(
 
     #NOTE: The assumption here that each item in the vnf is a resource, NOT a restraint (like latency).
     for resourceKey, resourceValue in vnf.items():
-        resourceSufficient = resourceSufficient and (res[resourceKey] >= resourceValue)
+        if resourceKey not in VNFRESTRAINTS:
+            resourceSufficient = resourceSufficient and (res[resourceKey] >= resourceValue)
+        else:
+            resourceSufficient = resourceSufficient and (res["domain"] == resourceValue) #Candidate domain must match
 
     return resourceSufficient

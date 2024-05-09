@@ -141,7 +141,6 @@ def generateEnhancedGraph(
 
     domainBWRanges = [[50, 100], [60, 100], [50, 100]]
 
-    #TODO: Consider BFS like Fredrik did
     #This creates a direct line of links for each node: 0<->1<->2... as a baseline so that all nodes have at least one connection
     for sourceNode in range(totalNodes - 1):
         destinationNode = sourceNode + 1
@@ -196,6 +195,14 @@ def generateEnhancedGraph(
         returnGraph.add_edge(domainNodeTuple[0], domainNodeTuple[1], bandwidth=interDomainBW[interDomainIndex], latency=interDomainLatency[interDomainIndex])
 
     
+    for nodeI in returnGraph:
+        sumI = 0
+
+        for nodeJ in returnGraph.neighbors(nodeI):
+            sumI += returnGraph.get_edge_data(nodeI, nodeJ)["bandwidth"]
+
+        returnGraph.nodes[nodeI]["bandwidth"] = sumI
+    
 
     returnGraphs.insert(0, returnGraph)
     return returnGraphs
@@ -219,7 +226,7 @@ def addSingleNode(
 
     nodeLatency = generateNUniformValues(1, latencyRange)[0]
 
-    graph.add_node(nodeIndex, cpu=nodeCPU, storage=nodeStorage, latency=nodeLatency)
+    graph.add_node(nodeIndex, cpu=nodeCPU, storage=nodeStorage, latency=nodeLatency, domain=mapNodeToDomain(nodeIndex))
 
 
 def padGraphToN(

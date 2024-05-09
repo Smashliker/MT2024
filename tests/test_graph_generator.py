@@ -13,16 +13,31 @@ sys.path.append('.')
 
 #NOTE: Must be after the path append
 from graph_generator import *
+from typing import Tuple
+
+def generateTestFiles() -> Tuple[str, str]:
+        baseString = r'./data/test'
+        txtFile = f"{baseString}.txt"
+        pickleFile = f"{baseString}.gpickle"
+
+        graph = generateEnhancedGraph()[0]
+        saveGraph(graph, baseString)
+
+        return txtFile, pickleFile
+
+def deleteTestFiles(
+        txtFile: str,
+        pickleFile: str
+        ) -> None:
+    
+    os.remove(txtFile)
+    os.remove(pickleFile)
 
 class Tests(unittest.TestCase):
 
     def test_generateFiles(self):
-        baseString = r'./test'
-        txtFile = f"{baseString}.txt"
-        pickleFile = f"{baseString}.gpickle"
 
-        graph = generateToyGraph()[0]
-        saveGraph(graph, baseString)
+        txtFile, pickleFile = generateTestFiles()
 
         try:
             assert os.path.isfile(txtFile)
@@ -34,8 +49,27 @@ class Tests(unittest.TestCase):
 
         #Clean up
         finally:
-            os.remove(txtFile)
-            os.remove(pickleFile)
+            deleteTestFiles(txtFile, pickleFile)
+
+    def test_edgesReachable(self):
+
+        txtFile, pickleFile = generateTestFiles()
+
+        try:
+            with open(pickleFile, 'rb') as f:
+                graph = pickle.load(f)
+
+                path = nx.dijkstra_path(graph, 0, 99)
+
+                assert len(path) > 0
+
+        #Clean up
+        finally:
+            deleteTestFiles(txtFile, pickleFile)
+
+
+    
+
 
     
 

@@ -10,9 +10,9 @@ from stable_baselines3.common.callbacks import BaseCallback
 
 from collections import defaultdict
 
-STATS = ["accepted", "rejected", "operating_servers"]
-COSTS = ["cpu_cost", "memory_cost", "bandwidth_cost"]
-UTILIZATIONS = ["cpu_utilization", "memory_utilization", "bandwidth_utilization"]
+STATS = ["accepted", "rejected", "operating_servers", "arc", "lar", "acr"]
+COSTS = []#["cpu_cost", "memory_cost", "bandwidth_cost"]
+UTILIZATIONS = []#["cpu_utilization", "memory_utilization", "bandwidth_utilization"]
 
 class StatsWrapper(gym.Wrapper):
     def __init__(
@@ -79,6 +79,31 @@ class EvalLogCallback(BaseCallback):
         self.logger.record("eval/acceptance_ratio", np.mean(acceptance))
         self.logger.record("eval/rejection_ratio", np.mean(rejection))
 
+        acr = np.mean(
+            [
+                env.statistics["acr"] / env.statistics["ep_length"]
+                for env in eval_envs
+            ]
+        )
+        self.logger.record("eval/acr", acr)
+
+        arc = np.mean(
+            [
+                env.statistics["arc"] / env.statistics["ep_length"]
+                for env in eval_envs
+            ]
+        )
+        self.logger.record("eval/arc", arc)
+
+        lar = np.mean(
+            [
+                env.statistics["lar"] / env.statistics["ep_length"]
+                for env in eval_envs
+            ]
+        )
+        self.logger.record("eval/lar", lar)
+
+        """
         costs = [
             {
                 key: env.statistics[key] / env.statistics["ep_length"]
@@ -91,6 +116,7 @@ class EvalLogCallback(BaseCallback):
         for key, value in costs.items():
             self.logger.record("eval/mean_{}".format(key), value)
 
+        
         occupied = [
             {key: env.statistics[key] for key in UTILIZATIONS} for env in eval_envs
         ]
@@ -102,6 +128,7 @@ class EvalLogCallback(BaseCallback):
 
         for key, value in avgOccupied.items():
             self.logger.record("eval/mean_{}".format(key), value)
+        """
 
         operating = np.mean(
             [
