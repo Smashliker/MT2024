@@ -17,7 +17,7 @@ jobs:
     strategy:
       matrix:
         platform: [ubuntu-20.04] 
-        python-version: [3.10.12] #Original NFVdeep code made for 3.8, this thesis done in 3.10.12
+        python-version: [3.8, 3.10.12] #Original NFVdeep code made for 3.8, this thesis done in 3.10.12
 
     steps:
     - uses: actions/checkout@v2
