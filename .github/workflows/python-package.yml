@@ -16,7 +16,7 @@ jobs:
     runs-on: ${{matrix.platform}}
     strategy:
       matrix:
-        platform: [ubuntu-22.04, macos-14] 
+        platform: [ubuntu-20.04] 
         python-version: [3.10.12] #Original NFVdeep code made for 3.8, this thesis done in 3.10.12
 
     steps:
