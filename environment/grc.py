@@ -30,13 +30,17 @@ class GRC():
         networkResources = self.env.vnfBacktrack.calculateAllNodeResources(remaining=True)
 
         cpuVector = [0] * len(networkResources)
+        storageVector = [0] * len(networkResources)
 
         for nodeIndex, nodeResourceDict in enumerate(networkResources):
             cpuVector[nodeIndex] = nodeResourceDict["cpu"]
+            storageVector[nodeIndex] = nodeResourceDict["storage"]
 
         sumCPUs = sum(cpuVector)
+        sumStorage = sum(storageVector)
 
         cpuVector = np.array(cpuVector, dtype=np.float16) / sumCPUs
+        storageVector = np.array(storageVector, dtype=np.float16) / sumStorage
 
         numNodes = self.env.vnfBacktrack.overlay.number_of_nodes()
         bigM = [[]] * numNodes
@@ -54,7 +58,7 @@ class GRC():
         delta = math.inf
 
         while delta >= self.th:
-            grcTuple[1] = (1 - self.d) * cpuVector + self.d * bigM @ grcTuple[0]
+            grcTuple[1] = (1 - self.d) * (cpuVector + storageVector) / 2 + self.d * bigM @ grcTuple[0]
             delta = np.linalg.norm(grcTuple[1] - grcTuple[0])
             grcTuple[0] = grcTuple[1]
 
