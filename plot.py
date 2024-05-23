@@ -9,22 +9,26 @@ import pickle
 
 from main import DEFAULTARRIVALCONFIG, DEFAULTNETWORKPATH, DEFAULTSEED
 from environment.env import StatKeeper
-from typing import List
+from typing import List, Tuple
 
 from collections import Counter
 
-def plotStandardValues(statKeeper: StatKeeper) -> None:
+def plotStandardValues(statKeepers: List[StatKeeper], legends: List[str]) -> None:
     subplotDimensions = (2, 3)
     axes: List[Axes] = []
 
-    toPlots = [
-        statKeeper.acrList[0],
-        statKeeper.arcList[0],
-        statKeeper.larList[0],
-        statKeeper.acrList[1],
-        statKeeper.arcList[1],
-        statKeeper.larList[1],
-        ]
+    manyToPlots: List[List[List[float]]] = []
+    for statKeeper in statKeepers:
+        manyToPlots.append(
+            [
+            statKeeper.acrList[0],
+            statKeeper.arcList[0],
+            statKeeper.larList[0],
+            statKeeper.acrList[1],
+            statKeeper.arcList[1],
+            statKeeper.larList[1],
+            ]
+        )
     
     xAxes = [
         "Timestep",
@@ -44,12 +48,21 @@ def plotStandardValues(statKeeper: StatKeeper) -> None:
         "LAR",
         ]
 
-    for index, toPlot in enumerate(toPlots):
-        axes.append(plt.subplot(subplotDimensions[0], subplotDimensions[1], len(axes) + 1))
-        axes[-1].plot(toPlot)
-        #axes[-1].legend()
-        axes[-1].set_xlabel(xAxes[index])
-        axes[-1].set_ylabel(yAxes[index])
+    for i, oneToPlots in enumerate(manyToPlots):
+        for j, toPlot in enumerate(oneToPlots):
+            if i == 0:
+                axes.append(plt.subplot(subplotDimensions[0], subplotDimensions[1], len(axes) + 1))
+
+                axes[j].set_xlabel(xAxes[j])
+                axes[j].set_ylabel(yAxes[j])
+
+            axes[j].plot(toPlot, label=legends[i])
+            #axes[-1].legend()
+
+            if i == len(manyToPlots) - 1:
+            #    axes[j].legend(legends)
+                axes[j].legend()
+            
 
     plt.show()
 
@@ -97,10 +110,28 @@ def acceptedRejectedBarPlot(statKeeper: StatKeeper) -> None:
 
 
 if __name__ == "__main__":
-    with open("./data/5MregularPolicyStatKeeper.gpickle", 'rb') as f:
-        statKeeper: StatKeeper = pickle.load(f)
+    statKeeperTuple: Tuple[List, List] = (
+    [
+        "./data/bestRegularPolicyStatKeeper.gpickle",
+        "./data/federatedPolicyStatKeeper.gpickle",
+        "./data/grcStatKeeper.gpickle",
+    ],
 
-    plotStandardValues(statKeeper)
+    [
+        "PPO",
+        "Federated",
+        "GRC",
+    ],
+    )
 
-    acceptedRejectedBarPlot(statKeeper)
+    statKeepers: List[StatKeeper] = []
+    for fileName in statKeeperTuple[0]:
+        with open(fileName, 'rb') as f:
+            statKeeper: StatKeeper = pickle.load(f)
+            statKeepers.append(statKeeper)
+
+    plotStandardValues(statKeepers, statKeeperTuple[1])
+
+    for statKeeper in statKeepers:
+        acceptedRejectedBarPlot(statKeeper)
 

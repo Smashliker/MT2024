@@ -12,8 +12,7 @@ from main import DEFAULTARRIVALCONFIG, DEFAULTNETWORKPATH
 
 DEFAULTSEED = 0 #Different from main.py since we here want determinism for testing
 
-if __name__ == "__main__":
-
+def evalPolicy(policyName: str):
     networkPath = DEFAULTNETWORKPATH
 
     with open(Path(DEFAULTARRIVALCONFIG), "r") as file:
@@ -22,11 +21,10 @@ if __name__ == "__main__":
 
     env = Env(networkPath, arrival_config, takeStats=True)
 
-    #policy = "./5MfederatedPolicy"
-    policy = "grc"
-
-    #agent = PPO.load(policy, env=env)
-    agent = GRC(env, 0.5, 0.01)
+    if "grc" not in policyName:
+        agent = PPO.load(policyName, env=env)
+    if "grc" in policyName:
+        agent = GRC(env, 0.5, 0.01)
 
     done = False
     obs = env.reset()
@@ -34,5 +32,17 @@ if __name__ == "__main__":
         action, _ = agent.predict(obs)
         obs, _, done, _ = env.step(action)
 
-    with open(f"./data/{policy}StatKeeper.gpickle", 'wb') as f:
+    with open(f"./data/{policyName}StatKeeper.gpickle", 'wb') as f:
         pickle.dump(env.statKeeper, f, pickle.HIGHEST_PROTOCOL)
+
+
+if __name__ == "__main__":
+    policyNames = [
+        "./bestRegularPolicy",
+        "./federatedPolicy",
+        "grc",
+    ]
+
+    for policyName in policyNames:
+        evalPolicy(policyName)
+    
