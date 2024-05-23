@@ -36,6 +36,9 @@ class Network:
         self.revenue = 0
         self.cost = 0
 
+        self.unitRevenue = 0
+        self.unitCost = 0
+
         self.currentDomain = -1
 
     def checkTTL(
@@ -153,28 +156,36 @@ class Network:
             ) -> None:
 
         allocations = self.scAllocation[sc]
+        thisRevenue = 0
+        thisCost = 0
 
         #It is assumed every SC must have at least one VNF
         for vnfKey, value in sc.vnfs[0].items():
             if vnfKey not in VNFRESTRAINTS:
-                self.revenue += value
-                self.cost += value
+                thisRevenue += value
+                thisCost += value
 
         #For each additional VNF in SC
         for allocationIndex in range(1, len(allocations)):
 
             for vnfKey, value in sc.vnfs[allocationIndex].items():
                 if vnfKey not in VNFRESTRAINTS:
-                    self.revenue += value
-                    self.cost += value
+                    thisRevenue += value
+                    thisCost += value
             
             allocationTuple = (allocations[allocationIndex - 1], allocations[allocationIndex])
             #We do not spend any BW if allocated to same node
             if allocationTuple[0] != allocationTuple[1]:
-                self.revenue += sc.virtualLinkRequirements[allocationIndex]
+                thisRevenue += sc.virtualLinkRequirements[allocationIndex]
 
                 hops = len(nx.dijkstra_path(self.overlay, allocationTuple[0], allocationTuple[1], weight="latency")) - 1
-                self.cost += sc.virtualLinkRequirements[allocationIndex] * hops
+                thisCost += sc.virtualLinkRequirements[allocationIndex] * hops
+
+        self.revenue += thisRevenue * sc.ttl
+        self.cost += thisCost * sc.ttl
+
+        self.unitRevenue += thisRevenue
+        self.unitCost += thisRevenue
 
 
     """

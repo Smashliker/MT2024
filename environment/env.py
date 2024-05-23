@@ -127,16 +127,15 @@ class Env(gym.Env):
         numOperating = len(self.vnfBacktrack.getOperatingServers())
         info.update({"operating_servers": numOperating})
 
-        acr = self.nAccepted / self.nProcessed if self.nProcessed != 0 else 0
+        acr = self.nAccepted / self.nProcessed if self.nProcessed != 0 else None
         info.update({"acr": acr})
 
-        arc = self.vnfBacktrack.revenue / self.vnfBacktrack.cost if self.vnfBacktrack.cost != 0 else 0
+        arc = self.vnfBacktrack.revenue / self.vnfBacktrack.cost if self.vnfBacktrack.cost != 0 else None
         info.update({"arc": arc})
 
-        lar = self.vnfBacktrack.revenue / 25000 #Hardcoded division by big T as described in requests.json
+        lar = self.vnfBacktrack.revenue / self.vnfBacktrack.timestep if self.vnfBacktrack.timestep != 0 else None
         info.update({"lar": lar})
 
-        #TODO: Change these to None if dividing by zero?
         if hasattr(self, 'statKeeper'):
             self.statKeeper.acrList[0].append(acr)
             self.statKeeper.arcList[0].append(arc)
@@ -295,7 +294,7 @@ class Env(gym.Env):
         reward = 0
 
         if isLastVNF and isValidSC:
-            reward = self.vnfBacktrack.revenue / self.vnfBacktrack.cost #LARC
+            reward = self.vnfBacktrack.unitRevenue / self.vnfBacktrack.unitCost if self.vnfBacktrack.unitCost != 0 else 0 #unit ARC
         elif isValidSC:
             reward = 0.1 #- len(nx.dijkstra_path(self.vnfBacktrack.overlay, self.vnfBacktrack.scAllocation[self.sc][-1], self.vnfBacktrack.scAllocation[self.sc][-2], weight="latency")) / (10 * self.vnfBacktrack.overlay.number_of_nodes())
 

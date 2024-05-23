@@ -124,7 +124,7 @@ def generateEnhancedGraph(
 
     threeDomains = [spaceIndices, airIndices, groundIndices]
     threeCPURanges = [[20, 40], [20, 40], [50, 100]]
-    threeStorageRanges = [[50, 80], [50, 80], [50, 80]]
+    threeStorageRanges = [[20, 40], [20, 40], [50, 100]]
 
     #Creation of nodes
     for domainIndex, domain in enumerate(threeDomains):

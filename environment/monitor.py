@@ -39,7 +39,7 @@ class StatsWrapper(gym.Wrapper):
             key for key in info if key in STATS + COSTS + UTILIZATIONS
         ]
         for key in keys:
-            self.statistics[key] += info[key]
+            self.statistics[key] += info[key] if info[key] != None else 0
 
         self.statistics["ep_length"] += 1
 
