@@ -16,8 +16,8 @@ jobs:
     runs-on: ${{matrix.platform}}
     strategy:
       matrix:
-        platform: [ubuntu-latest, macos-latest] 
-        python-version: [3.8, 3.10.12] #Original NFVdeep code made for 3.8, this thesis done in 3.10.12
+        platform: [ubuntu-20.04] 
+        python-version: [3.10.12] #Original NFVdeep code made for 3.8, this thesis done in 3.10.12
 
     steps:
     - uses: actions/checkout@v2
