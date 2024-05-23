@@ -76,7 +76,7 @@ class Tests(unittest.TestCase):
             SCparams = {
                 "arrivalTime": 0,
                 "ttl": 1000,
-                "vnfs": [{"cpu": 38, "storage": 0, "bandwidth": 0}, {"cpu": 0, "storage": 73, "bandwidth": 0}, {"cpu": 0, "storage": 0, "bandwidth": 604}],
+                "vnfs": [{"cpu": 38, "storage": 0, "bandwidth": 0}, {"cpu": 0, "storage": 36, "bandwidth": 0}, {"cpu": 0, "storage": 0, "bandwidth": 604}],
                 "max_response_latency": 24,
                 "virtualLinkRequirements": [1, 1, 1]
             }
