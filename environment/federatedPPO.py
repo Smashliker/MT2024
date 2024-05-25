@@ -235,7 +235,7 @@ class federatedPPO(PPO):
 
         continueTraining = True
 
-        milestoneIncrement = 10000 #NOTE: This may be tinkered with
+        milestoneIncrement = 5000 #NOTE: This value was found to be optimal via testing for this Thesis' problem specifically
         nextMilestone = milestoneIncrement
 
         self.models = models
@@ -336,7 +336,10 @@ class federatedPPO(PPO):
 
             self.logger.dump(step=self.num_timesteps)
 
+        #Must lock to avoid conflicts of interest
+        self.lock.acquire()
         self.train()
+        self.lock.release()
 
         return True
     
