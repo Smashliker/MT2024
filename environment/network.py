@@ -138,6 +138,7 @@ class Network:
             sc: ServiceChain
             ) -> bool:
 
+        #NOTE: This should probably not just return true, as it is possible that a single VNF violates the latency requirement.
         if sc not in self.scAllocation:
             return True
 
@@ -185,7 +186,7 @@ class Network:
         self.cost += thisCost * sc.ttl
 
         self.unitRevenue += thisRevenue
-        self.unitCost += thisRevenue
+        self.unitCost += thisCost
 
 
     """
