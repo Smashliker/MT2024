@@ -294,7 +294,7 @@ class Env(gym.Env):
         reward = 0
 
         if isLastVNF and isValidSC:
-            reward = self.vnfBacktrack.unitRevenue / self.vnfBacktrack.unitCost if self.vnfBacktrack.unitCost != 0 else 0 #unit ARC
+            reward = self.vnfBacktrack.revenue / self.vnfBacktrack.cost if self.vnfBacktrack.cost != 0 else 0 #ARC
         elif isValidSC:
             reward = 0.1 #- len(nx.dijkstra_path(self.vnfBacktrack.overlay, self.vnfBacktrack.scAllocation[self.sc][-1], self.vnfBacktrack.scAllocation[self.sc][-2], weight="latency")) / (10 * self.vnfBacktrack.overlay.number_of_nodes())
 
