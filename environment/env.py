@@ -66,10 +66,22 @@ class Env(gym.Env):
         vnf = self.sc.vnfs[self.vnfIndex]
         virtualLinkRequirement = self.sc.virtualLinkRequirements[self.vnfIndex]
 
+        if hasattr(self, 'statKeeper'):
+            if action < self.network.overlay.number_of_nodes(): #Don't include voluntary rejections in this analysis
+                self.statKeeper.domainLists[0].append(mapNodeToDomain(action))
+
         isValidSC = self.vnfBacktrack.allocateVNF(self.sc, vnf, virtualLinkRequirement, action)
+        if not isValidSC and hasattr(self, 'statKeeper'):
+            self.statKeeper.vnfList[-1] = self.statKeeper.vnfList[-2] + 1
+            self.statKeeper.scList[-1] = self.statKeeper.scList[-2]
+
         #Must calculate these separately so that we see the if the last VNF violates SC requirements
         isValidSC = isValidSC and self.vnfBacktrack.checkSCConstraints(self.sc) #self.vnfBacktrack.canAllocate(self.sc, self.vnfIndex + 1)
         
+        if not isValidSC and hasattr(self, 'statKeeper') and self.statKeeper.vnfList[-1] == 0:
+            self.statKeeper.scList[-1] = self.statKeeper.scList[-2] + 1
+            self.statKeeper.vnfList[-1] = self.statKeeper.vnfList[-2]
+
         logging.debug(
                 "This SC allocation is: {}.".format(
                     "possible" if isValidSC else "impossible"
@@ -81,6 +93,12 @@ class Env(gym.Env):
         if isValidSC and isLastVNF:
             if hasattr(self, 'statKeeper'):
                 self.statKeeper.acceptedRejectedList[0].append(len(self.sc.vnfs))
+
+                self.statKeeper.vnfList[-1] = self.statKeeper.vnfList[-2]
+                self.statKeeper.scList[-1] = self.statKeeper.scList[-2]
+
+                for allocationIndex in self.vnfBacktrack.scAllocation[self.sc]:
+                    self.statKeeper.domainLists[1].append(mapNodeToDomain(allocationIndex))
 
             self.vnfBacktrack.calculateRevenueCost(self.sc) #NOTE: Deepcopy above creates a deepcopy of the SC as well, means we must call this on VNFBacktrack
             self.nAccepted += 1
@@ -127,10 +145,10 @@ class Env(gym.Env):
         numOperating = len(self.vnfBacktrack.getOperatingServers())
         info.update({"operating_servers": numOperating})
 
-        acr = self.nAccepted / self.nProcessed if self.nProcessed != 0 else None
+        acr = self.nAccepted / self.nProcessed * 100 if self.nProcessed != 0 else None
         info.update({"acr": acr})
 
-        arc = self.vnfBacktrack.revenue / self.vnfBacktrack.cost if self.vnfBacktrack.cost != 0 else None
+        arc = self.vnfBacktrack.revenue / self.vnfBacktrack.cost * 100 if self.vnfBacktrack.cost != 0 else None
         info.update({"arc": arc})
 
         lar = self.vnfBacktrack.revenue / self.vnfBacktrack.timestep if self.vnfBacktrack.timestep != 0 else None
@@ -177,11 +195,20 @@ class Env(gym.Env):
 
                 if nextSC != None:
                     self.sc = deepcopy(nextSC)
+
+                    if hasattr(self, 'statKeeper'):
+                        self.statKeeper.arrivalTimeList.append(self.sc.arrivalTime - self.network.timestep)
+
                     self.network.update(self.sc.arrivalTime) #Set the current network time to the time the next SC arrives
 
                     logging.debug("Time progressed, new SC arrived.")
 
             self.vnfBacktrack = deepcopy(self.network)
+
+            if hasattr(self, 'statKeeper'):
+                self.statKeeper.vnfList.append(0)
+                self.statKeeper.scList.append(0)
+
             return False
 
         except StopIteration:
@@ -309,7 +336,12 @@ class StatKeeper:
 
     acceptedRejectedList: List[List[int]] = field(default_factory=lambda: [[], []]) #Two lists: 1 for amount of accepted SCs of length n, and 1 for amount of rejected SCs of length n
 
-    #arrivalTimeList: 
+    arrivalTimeList: List[float] = field(default_factory=lambda: [])
+
+    vnfList: List[int] = field(default_factory=lambda: [0]) #Times the amount of SCs
+    scList: List[int] = field(default_factory=lambda: [0])
+
+    domainLists: List[List[int]] = field(default_factory=lambda: [[], []]) #Two lists: 1 for the domains for each action, and one for the domains for each successfull VNF
 
     
 
