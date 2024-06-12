@@ -10,7 +10,7 @@ import pickle
 
 from main import DEFAULTARRIVALCONFIG, DEFAULTNETWORKPATH
 
-DEFAULTSEED = 0 #Different from main.py since we here want determinism for testing
+DEFAULTSEED = 1 #Different from main.py since we here want determinism for testing
 
 def evalPolicy(policyName: str):
     networkPath = DEFAULTNETWORKPATH
@@ -24,12 +24,12 @@ def evalPolicy(policyName: str):
     if "grc" not in policyName:
         agent = PPO.load(policyName, env=env)
     if "grc" in policyName:
-        agent = GRC(env, 0.5, 0.01)
+        agent = GRC(env, 0.15, 0.00001)
 
     done = False
     obs = env.reset()
     while not done:
-        action, _ = agent.predict(obs)
+        action, _ = agent.predict(obs, deterministic=True)
         obs, _, done, _ = env.step(action)
 
     with open(f"./data/{policyName}StatKeeper.gpickle", 'wb') as f:
@@ -38,9 +38,18 @@ def evalPolicy(policyName: str):
 
 if __name__ == "__main__":
     policyNames = [
-        "./bestRegularPolicy",
-        "./federatedPolicy",
+        "./bandwidthRegularPolicy",
+        "./bandwidthFederatedPolicy",
         "grc",
+        
+        #"./1250NewFederatedPolicy",
+        #"./2500NewFederatedPolicy",
+        #"./5000NewFederatedPolicy",
+        #"./10000NewFederatedPolicy",
+        #"./20000NewFederatedPolicy",
+
+        #"./2500NewFederatedPolicy",
+        #"./rewardFederatedPolicy",
     ]
 
     for policyName in policyNames:
