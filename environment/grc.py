@@ -25,22 +25,28 @@ class GRC():
 
     def predict(
             self,
-            obs: None = None
+            obs: None = None, #Needed to fit with input 
+            deterministic: bool = True,
+            threeResources: bool = True
             ) -> Tuple[int, None]:
         networkResources = self.env.vnfBacktrack.calculateAllNodeResources(remaining=True)
 
         cpuVector = [0] * len(networkResources)
         storageVector = [0] * len(networkResources)
+        bandwidthVector = [0] * len(networkResources)
 
         for nodeIndex, nodeResourceDict in enumerate(networkResources):
             cpuVector[nodeIndex] = nodeResourceDict["cpu"]
             storageVector[nodeIndex] = nodeResourceDict["storage"]
+            bandwidthVector[nodeIndex] = nodeResourceDict["bandwidth"]
 
         sumCPUs = sum(cpuVector)
         sumStorage = sum(storageVector)
+        sumBandwidth = sum(bandwidthVector)
 
         cpuVector = np.array(cpuVector, dtype=np.float16) / sumCPUs
         storageVector = np.array(storageVector, dtype=np.float16) / sumStorage
+        bandwidthVector = np.array(bandwidthVector, dtype=np.float16) / sumBandwidth
 
         numNodes = self.env.vnfBacktrack.overlay.number_of_nodes()
         bigM = [[]] * numNodes
@@ -50,7 +56,7 @@ class GRC():
 
             for nodeJ in self.env.vnfBacktrack.overlay.neighbors(nodeI):
                 bigM[nodeI][nodeJ] = self.env.vnfBacktrack.overlay.get_edge_data(nodeI, nodeJ)["bandwidth"]
-                bigM[nodeI][nodeJ] /= self.env.vnfBacktrack.overlay.nodes[nodeI]["bandwidth"]
+                bigM[nodeI][nodeJ] /= self.env.vnfBacktrack.overlay.nodes[nodeJ]["bandwidth"]
 
         bigM = np.array(bigM, dtype=np.float16)
 
@@ -58,7 +64,10 @@ class GRC():
         delta = math.inf
 
         while delta >= self.th:
-            grcTuple[1] = (1 - self.d) * (cpuVector + storageVector) / 2 + self.d * bigM @ grcTuple[0]
+            if threeResources:
+                grcTuple[1] = (1 - self.d) * (cpuVector + storageVector + bandwidthVector) / 3 + self.d * bigM @ grcTuple[0]
+            else:
+                grcTuple[1] = (1 - self.d) * (cpuVector + storageVector) / 2 + self.d * bigM @ grcTuple[0].T
             delta = np.linalg.norm(grcTuple[1] - grcTuple[0])
             grcTuple[0] = grcTuple[1]
 
