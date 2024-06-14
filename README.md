@@ -9,7 +9,7 @@ The code is heavily inspired by two other repositories, each with their own MIT 
 1. https://github.com/CN-UPB/NFVdeep/tree/main - LICENSE
 2. https://github.com/DLR-RM/stable-baselines3 - LICENSE.txt 
 
-The policy aggregation for the federated learning, a vital part of this thesis, was also inspired by a third repository, though no code was borrowed: https://github.com/pietromosca1994/DeRL_Golem
+The policy aggregation for the federated learning, a vital part of this thesis, was also inspired by a third repository, though no code was directly borrowed: https://github.com/pietromosca1994/DeRL_Golem
 
 ## Setup and Execution
 The project is designed for Python 3.10.12
