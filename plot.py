@@ -163,7 +163,7 @@ def plotRejectionStats(
 
 
 def acceptedRejectedBarPlot(statKeeper: StatKeeper, title: str ="") -> None:
-    subplotDimensions = (3, 1)
+    subplotDimensions = (1, 1)
     axes: List[Axes] = []
 
     counters = [
@@ -172,14 +172,18 @@ def acceptedRejectedBarPlot(statKeeper: StatKeeper, title: str ="") -> None:
         Counter(statKeeper.acceptedRejectedList[0] + statKeeper.acceptedRejectedList[1]),
         ]
 
-    barLabels = [[0] * len(counters[2])] * len(counters)
+    barLabels = [[1] * len(counters[2])] * len(counters[0:1])
+    for i, barLabel in enumerate(barLabels):
+        for j, label in enumerate(barLabel):
+            barLabel[j] += j
+
     barHeights = []
 
-    for index, counter in enumerate(counters):
+    for index, counter in enumerate(counters[0:1]):
         barHeights.append([0] * len(counters[2]))
 
         for length, count in counter.items():
-            barLabels[index][length - 1] = length
+            #barLabels[index][length - 1] = length
 
             barHeights[index][length - 1] = count
 
@@ -195,7 +199,7 @@ def acceptedRejectedBarPlot(statKeeper: StatKeeper, title: str ="") -> None:
         "Number of SCs",
         ]
 
-    for index, _ in enumerate(counters):
+    for index, _ in enumerate(counters[0:1]):
         axes.append(plt.subplot(subplotDimensions[0], subplotDimensions[1], len(axes) + 1))
         axes[-1].bar(barLabels[index], barHeights[index])
 
@@ -368,12 +372,12 @@ if __name__ == "__main__":
     #plotStandardValues(statKeepers, statKeeperTuple[1], 2)
 
     for i, statKeeper in enumerate(statKeepers):
-        #acceptedRejectedBarPlot(statKeeper, statKeeperTuple[1][i])
+        acceptedRejectedBarPlot(statKeeper, statKeeperTuple[1][i])
         continue
 
     #arrivalTimesBarPlot(statKeepers[0])
 
-    plotRejectionStats(statKeepers, ["VNF rejects", "SC rejects"], statKeeperTuple[1])
+    #plotRejectionStats(statKeepers, ["VNF rejects", "SC rejects"], statKeeperTuple[1])
 
     #domainBarPlot(statKeepers, statKeeperTuple[1], True)
 
